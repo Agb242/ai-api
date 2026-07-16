@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NexusAI — Clés API LLM en Mobile Money</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+  <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #0b1120; --bg2: #0f172a; --card: #ffffff; --card-soft: #f8fafc;
+      --text: #0f172a; --muted: #64748b; --border: #e2e8f0;
+      --primary: #6366f1; --primary-d: #4f46e5; --primary-l: #eef2ff;
+      --accent: #06b6d4; --green: #16a34a; --red: #dc2626; --amber: #f59e0b;
+      --radius: 16px;
+    }
+    body { font-family: 'Segoe UI', Inter, Roboto, sans-serif; background: #f1f5f9; color: var(--text); line-height: 1.5; }
+    a { color: var(--primary-d); }
+
+    /* ---- Header commun ---- */
+    header.nav { position: sticky; top: 0; z-index: 50; background: rgba(255,255,255,0.85); backdrop-filter: blur(10px); border-bottom: 1px solid var(--border); }
+    .nav-inner { max-width: 1100px; margin: 0 auto; padding: 14px 24px; display: flex; align-items: center; justify-content: space-between; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 20px; color: var(--text); cursor: pointer; }
+    .brand .logo { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, var(--primary), var(--accent)); display: grid; place-items: center; color: #fff; font-size: 20px; }
+    .nav-links { display: flex; align-items: center; gap: 18px; }
+    .nav-links a { text-decoration: none; color: var(--muted); font-size: 14px; font-weight: 500; }
+    .nav-links a:hover { color: var(--text); }
+    .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px 18px; border-radius: 12px; font-size: 15px; font-weight: 600; cursor: pointer; border: none; transition: all .15s; text-decoration: none; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-d); transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,0.35); }
+    .btn-ghost { background: transparent; color: var(--primary-d); border: 1px solid var(--primary); }
+    .btn-ghost:hover { background: var(--primary-l); }
+    .btn-light { background: #fff; color: var(--text); border: 1px solid var(--border); }
+    .btn-light:hover { border-color: var(--primary); }
+    .btn-sm { padding: 7px 14px; font-size: 13px; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .mode-badge { font-size: 11px; padding: 3px 10px; border-radius: 999px; background: #e0e7ff; color: #3730a3; font-weight: 600; }
+
+    main { max-width: 1100px; margin: 0 auto; padding: 32px 24px 64px; }
+    .screen { display: none; }
+    .screen.active { display: block; }
+
+    /* ---- Landing : Hero ---- */
+    .hero { text-align: center; padding: 48px 0 32px; }
+    .hero .pill { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; background: var(--primary-l); color: var(--primary-d); font-size: 13px; font-weight: 600; margin-bottom: 20px; }
+    .hero h1 { font-size: 48px; line-height: 1.1; font-weight: 800; letter-spacing: -1px; margin-bottom: 18px; background: linear-gradient(135deg, #0f172a, var(--primary-d)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+    .hero p.lead { font-size: 19px; color: var(--muted); max-width: 620px; margin: 0 auto 28px; }
+    .hero-cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 16px; }
+    .hero-trust { font-size: 13px; color: var(--muted); }
+    .hero-trust span { margin: 0 8px; }
+
+    /* ---- Sections ---- */
+    .section { padding: 56px 0; }
+    .section-title { text-align: center; margin-bottom: 40px; }
+    .section-title h2 { font-size: 32px; font-weight: 800; letter-spacing: -0.5px; }
+    .section-title p { color: var(--muted); margin-top: 8px; font-size: 16px; }
+
+    /* Features */
+    .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; }
+    .feature { background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; transition: all .2s; }
+    .feature:hover { border-color: var(--primary); transform: translateY(-2px); box-shadow: 0 12px 28px rgba(0,0,0,0.06); }
+    .feature .icon { width: 44px; height: 44px; border-radius: 12px; display: grid; place-items: center; font-size: 22px; margin-bottom: 14px; }
+    .feature h3 { font-size: 17px; font-weight: 700; margin-bottom: 6px; }
+    .feature p { font-size: 14px; color: var(--muted); }
+
+    /* Steps */
+    .steps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 24px; counter-reset: step; }
+    .step { text-align: center; position: relative; }
+    .step .num { width: 48px; height: 48px; border-radius: 50%; background: var(--primary); color: #fff; font-weight: 800; font-size: 20px; display: grid; place-items: center; margin: 0 auto 14px; }
+    .step h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
+    .step p { font-size: 14px; color: var(--muted); }
+
+    /* Pricing */
+    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; align-items: stretch; }
+    .price-card { background: #fff; border: 2px solid var(--border); border-radius: 20px; padding: 32px; display: flex; flex-direction: column; position: relative; transition: all .2s; }
+    .price-card:hover { border-color: #cbd5e1; }
+    .price-card.popular { border-color: var(--primary); box-shadow: 0 20px 40px rgba(99,102,241,0.15); }
+    .price-card.popular::before { content: "★ Le plus choisi"; position: absolute; top: -13px; left: 50%; transform: translateX(-50%); background: var(--primary); color: #fff; font-size: 12px; padding: 4px 14px; border-radius: 999px; font-weight: 700; white-space: nowrap; }
+    .price-card .plan { font-size: 20px; font-weight: 800; }
+    .price-card .tagline { font-size: 14px; color: var(--muted); margin-bottom: 16px; }
+    .price-card .amount { font-size: 42px; font-weight: 800; letter-spacing: -1px; }
+    .price-card .amount small { font-size: 15px; font-weight: 500; color: var(--muted); }
+    .price-card .budget { display: inline-block; margin: 10px 0 18px; padding: 4px 12px; background: var(--primary-l); color: var(--primary-d); border-radius: 8px; font-size: 13px; font-weight: 600; }
+    .price-card ul { list-style: none; font-size: 14px; margin-bottom: 22px; flex: 1; }
+    .price-card ul li { padding: 5px 0; }
+    .price-card ul.advantages li::before { content: "✓ "; color: var(--green); font-weight: 800; }
+    .price-card ul.limits { color: var(--muted); font-size: 13px; }
+    .price-card ul.limits li::before { content: "•  "; color: #94a3b8; }
+
+    /* FAQ */
+    .faq { max-width: 760px; margin: 0 auto; }
+    .faq-item { background: #fff; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 12px; overflow: hidden; }
+    .faq-q { padding: 18px 22px; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; }
+    .faq-q .chev { transition: transform .2s; color: var(--muted); }
+    .faq-item.open .faq-q .chev { transform: rotate(180deg); }
+    .faq-a { max-height: 0; overflow: hidden; transition: max-height .25s ease; padding: 0 22px; color: var(--muted); font-size: 14px; }
+    .faq-item.open .faq-a { max-height: 200px; padding-bottom: 18px; }
+
+    /* CTA final */
+    .cta-final { text-align: center; background: linear-gradient(135deg, var(--bg2), var(--primary-d)); border-radius: 24px; padding: 48px 32px; color: #fff; }
+    .cta-final h2 { color: #fff; font-size: 30px; font-weight: 800; margin-bottom: 12px; }
+    .cta-final p { color: rgba(255,255,255,0.8); margin-bottom: 24px; font-size: 17px; }
+
+    footer { border-top: 1px solid var(--border); padding: 32px 24px; text-align: center; color: var(--muted); font-size: 13px; }
+
+    /* ---- Forms / Buy / Login ---- */
+    .form-wrap { max-width: 520px; margin: 0 auto; background: #fff; border: 1px solid var(--border); border-radius: var(--radius); padding: 32px; }
+    .form-wrap h2 { font-size: 24px; margin-bottom: 6px; }
+    .form-wrap .sub { color: var(--muted); margin-bottom: 24px; font-size: 14px; }
+    .form-group { margin-bottom: 16px; }
+    .form-row { display: flex; gap: 12px; }
+    .form-row .form-group { flex: 1; }
+    label { display: block; font-weight: 600; color: #334155; margin-bottom: 6px; font-size: 14px; }
+    input, select, textarea { width: 100%; padding: 11px 14px; border: 1px solid #cbd5e1; border-radius: 10px; font-size: 15px; background: #fff; font-family: inherit; }
+    input:focus, select:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    .pack-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .pack-card { border: 2px solid var(--border); border-radius: 12px; padding: 16px; cursor: pointer; text-align: center; transition: all .15s; }
+    .pack-card.selected { border-color: var(--primary); background: var(--primary-l); }
+    .pack-card .pn { font-weight: 700; }
+    .pack-card .pp { font-size: 18px; font-weight: 800; margin-top: 4px; }
+    .status-box { margin-top: 18px; padding: 14px; border-radius: 10px; background: var(--card-soft); font-size: 14px; }
+    .err { color: var(--red); } .ok { color: var(--green); } .pend { color: var(--amber); }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+
+    /* ---- Dashboard ---- */
+    .dash-head { display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+    .welcome { font-size: 26px; font-weight: 800; }
+    .welcome small { display: block; font-size: 14px; font-weight: 500; color: var(--muted); }
+    .cred-card { background: linear-gradient(135deg, #1e293b, #312e81); color: #e2e8f0; border-radius: 18px; padding: 24px; margin-bottom: 24px; }
+    .cred-card h3 { color: #fff; margin-bottom: 14px; font-size: 16px; }
+    .cred-row { display: flex; justify-content: space-between; align-items: center; padding: 7px 0; font-size: 14px; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .cred-row:last-child { border-bottom: none; }
+    .cred-row .lbl { color: #94a3b8; }
+    .cred-row .val { font-family: 'Courier New', monospace; word-break: break-all; text-align: right; }
+    .cred-row .val.txt { font-family: inherit; }
+    .copy-btn { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.25); color: #fff; padding: 4px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; white-space: nowrap; }
+    .copy-btn:hover { background: rgba(255,255,255,0.2); }
+    .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; margin-bottom: 24px; }
+    .stat { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .stat .sl { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+    .stat .sv { font-size: 22px; font-weight: 800; margin-top: 4px; }
+    .stat .sv.sm { font-size: 14px; }
+    .charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    @media (max-width: 720px) { .charts-grid { grid-template-columns: 1fr; } .pack-grid { grid-template-columns: 1fr; } .hero h1 { font-size: 34px; } }
+    .chart-card { background: #fff; border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+    .chart-card h4 { font-size: 14px; font-weight: 700; margin-bottom: 10px; color: #334155; }
+    .chart-card .chart-wrap { position: relative; height: 180px; }
+    .chart-empty { font-size: 12px; color: #94a3b8; text-align: center; padding: 40px 0; }
+    .logs-table { width: 100%; border-collapse: collapse; font-size: 13px; background: #fff; border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+    .logs-table th { background: var(--card-soft); padding: 10px 14px; text-align: left; font-weight: 700; color: #475569; font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .logs-table td { padding: 10px 14px; border-top: 1px solid var(--border); }
+    .logs-table tr:hover td { background: #fafbfc; }
+    .muted { color: #94a3b8; }
+
+    /* Chatground premium */
+    .chat-section { background: #fff; border: 1px solid var(--border); border-radius: 18px; padding: 24px; margin-top: 24px; }
+    .chat-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+    .chat-head h3 { font-size: 18px; font-weight: 700; }
+    .chat-controls { display: flex; gap: 8px; align-items: center; }
+    .chat-controls select { width: auto; min-width: 200px; }
+    .chat-box { height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: 14px; padding: 18px; background: var(--card-soft); display: flex; flex-direction: column; gap: 14px; }
+    .msg { display: flex; gap: 10px; max-width: 85%; }
+    .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+    .avatar { width: 32px; height: 32px; border-radius: 50%; flex-shrink: 0; display: grid; place-items: center; font-size: 16px; color: #fff; }
+    .avatar.assistant { background: linear-gradient(135deg, var(--primary), var(--accent)); }
+    .avatar.user { background: #475569; }
+    .bubble { padding: 11px 15px; border-radius: 14px; font-size: 14px; line-height: 1.55; }
+    .msg.assistant .bubble { background: #fff; border: 1px solid var(--border); border-top-left-radius: 4px; }
+    .msg.user .bubble { background: var(--primary); color: #fff; border-top-right-radius: 4px; }
+    .bubble.system { background: #fef9c3; color: #854d0e; font-size: 12px; }
+    .bubble p { margin: 0 0 8px; } .bubble p:last-child { margin-bottom: 0; }
+    .bubble pre { background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 8px; overflow-x: auto; font-size: 12px; margin: 6px 0; }
+    .bubble code { background: rgba(99,102,241,0.1); padding: 1px 5px; border-radius: 4px; font-size: 12px; font-family: 'Courier New', monospace; }
+    .bubble pre code { background: transparent; padding: 0; }
+    .bubble ul, .bubble ol { padding-left: 20px; margin: 6px 0; }
+    .bubble table { border-collapse: collapse; margin: 8px 0; font-size: 13px; }
+    .bubble th, .bubble td { border: 1px solid var(--border); padding: 4px 8px; }
+    .bubble h1,.bubble h2,.bubble h3 { margin: 8px 0 4px; }
+    .typing { display: inline-flex; gap: 4px; padding: 12px 16px; }
+    .typing span { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite; }
+    .typing span:nth-child(2) { animation-delay: .2s; } .typing span:nth-child(3) { animation-delay: .4s; }
+    @keyframes blink { 0%,60%,100% { opacity: .3; } 30% { opacity: 1; } }
+    .chat-input-row { display: flex; gap: 8px; margin-top: 14px; }
+    .chat-input-row input { flex: 1; }
+    .chat-info { font-size: 12px; color: var(--muted); margin-top: 8px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px; }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <div class="nav-inner">
+      <div class="brand" onclick="go('landing')">
+        <div class="logo">⚡</div>
+        <span>NexusAI</span>
+      </div>
+      <div class="nav-links" id="navLinks"></div>
+      <span class="mode-badge" id="modeBadge">…</span>
+    </div>
+  </header>
+
+  <main>
+    <!-- ============ LANDING ============ -->
+    <section class="screen active" id="screenLanding">
+      <div class="hero">
+        <span class="pill">🚀 Paiement Mobile Money · Activation instantanée</span>
+        <h1>Clés API LLM, payées en Mobile Money</h1>
+        <p class="lead">Accédez aux meilleurs modèles d'IA (Llama, GPT-OSS, Qwen, Nemotron…) en quelques secondes. Choisissez un pack, payez, recevez votre clé, et intégrez. C'est tout.</p>
+        <div class="hero-cta">
+          <button class="btn btn-primary" onclick="document.getElementById('pricingSection').scrollIntoView({behavior:'smooth'})">Voir les offres</button>
+          <button class="btn btn-light" onclick="go('login')">J'ai déjà une clé</button>
+        </div>
+        <div class="hero-trust"><span>✓ Sans carte bancaire</span>·<span>✓ Clé immédiate</span>·<span>✓ Suivi de consommation</span></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><h2>Pourquoi NexusAI ?</h2><p>Tout ce qu'il faut pour exploiter les LLM, sans friction.</p></div>
+        <div class="features-grid">
+          <div class="feature"><div class="icon" style="background:#dbeafe">📱</div><h3>Mobile Money</h3><p>Payez avec MTN, Moov, Orange Money. Aucune carte bancaire requise.</p></div>
+          <div class="feature"><div class="icon" style="background:#dcfce7">⚡</div><h3>Activation instantanée</h3><p>Votre clé API est générée et active dès la confirmation du paiement.</p></div>
+          <div class="feature"><div class="icon" style="background:#fae8ff">📊</div><h3>Suivi en temps réel</h3><p>Budget consommé, nombre de requêtes, coût par jour — tout est visible.</p></div>
+          <div class="feature"><div class="icon" style="background:#fef3c7">💬</div><h3>Chatground inclus</h3><p>Testez vos modèles directement dans le dashboard, sans installer rien.</p></div>
+          <div class="feature"><div class="icon" style="background:#cffafe">🔒</div><h3>Sécurisé</h3><p>Vos clés restent privées. Le proxy centralise et protège les accès.</p></div>
+          <div class="feature"><div class="icon" style="background:#e0e7ff">🔄</div><h3>Compatible OpenAI</h3><p>API au format OpenAI : branchez vos outils existants sans adapter le code.</p></div>
+        </div>
+      </div>
+
+      <div class="section" style="background:#fff; border-radius:24px; border:1px solid var(--border);">
+        <div class="section-title"><h2>Comment ça marche</h2><p>3 étapes, moins de 2 minutes.</p></div>
+        <div class="steps-grid">
+          <div class="step"><div class="num">1</div><h3>Choisissez un pack</h3><p>Sélectionnez l'offre adaptée à votre besoin et votre budget.</p></div>
+          <div class="step"><div class="num">2</div><h3>Payez en Mobile Money</h3><p>Validez le paiement sur votre téléphone. Confirmation en quelques secondes.</p></div>
+          <div class="step"><div class="num">3</div><h3>Recevez votre clé</h3><p>Accédez à votre dashboard : clé API, suivi conso et chatground.</p></div>
+        </div>
+      </div>
+
+      <div class="section" id="pricingSection">
+        <div class="section-title"><h2>Des offres simples et transparentes</h2><p>Pas d'engagement. Payez à l'usage, en FCFA.</p></div>
+        <div class="pricing-grid" id="pricing"></div>
+      </div>
+
+      <div class="section">
+        <div class="section-title"><h2>Questions fréquentes</h2></div>
+        <div class="faq" id="faq"></div>
+      </div>
+
+      <div class="cta-final">
+        <h2>Prêt à démarrer ?</h2>
+        <p>Obtenez votre clé API en moins de 2 minutes.</p>
+        <button class="btn btn-primary" onclick="go('buy')">Choisir un pack</button>
+      </div>
+    </section>
+
+    <!-- ============ BUY ============ -->
+    <section class="screen" id="screenBuy">
+      <div class="form-wrap">
+        <h2>🛒 Acheter un pack</h2>
+        <div class="sub">Payez par Mobile Money, recevez votre clé immédiatement.</div>
+        <div class="pack-grid" id="packGrid"></div>
+        <div class="form-row">
+          <div class="form-group"><label for="pseudo">Pseudo</label><input type="text" id="pseudo" placeholder="ex: Jean Dupont" /></div>
+          <div class="form-group"><label for="phone">Téléphone</label><input type="tel" id="phone" placeholder="22997000000" value="22997000000" /></div>
+        </div>
+        <button class="btn btn-primary" id="payBtn" style="width:100%">Payer maintenant</button>
+        <div style="text-align:center;margin-top:12px;"><a href="#" onclick="go('landing');return false;" style="font-size:13px;">← Retour aux offres</a></div>
+        <div class="status-box" id="statusBox"><div>En attente d'action…</div></div>
+      </div>
+    </section>
+
+    <!-- ============ LOGIN ============ -->
+    <section class="screen" id="screenLogin">
+      <div class="form-wrap">
+        <h2>🔐 Connexion au dashboard</h2>
+        <div class="sub">Entrez la clé API reçue lors de votre achat.</div>
+        <div class="form-group">
+          <label for="loginKey">Clé API</label>
+          <input type="password" id="loginKey" placeholder="sk-..." />
+          <div class="hint">Vous n'avez pas de clé ? <a href="#" onclick="go('buy');return false;">Acheter un pack</a></div>
+        </div>
+        <button class="btn btn-primary" id="loginBtn" style="width:100%">Se connecter</button>
+        <div class="status-box" id="loginStatus" style="display:none;"></div>
+        <div style="text-align:center;margin-top:12px;"><a href="#" onclick="go('landing');return false;" style="font-size:13px;">← Accueil</a></div>
+      </div>
+    </section>
+
+    <!-- ============ DASHBOARD ============ -->
+    <section class="screen" id="screenDash">
+      <div class="dash-head">
+        <div class="welcome">👋 Bonjour <span id="welcomeAlias">—</span><small>Pack <b id="welcomePack">—</b> · <span id="welcomeUserId">—</span></small></div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-light btn-sm" id="refreshDashboardBtn">⟳ Rafraîchir</button>
+          <button class="btn btn-ghost btn-sm" onclick="logout()">Déconnexion</button>
+        </div>
+      </div>
+
+      <div class="cred-card">
+        <h3>🔑 Votre clé API</h3>
+        <div class="cred-row"><span class="lbl">Clé</span><span class="val" id="credKey">—</span><button class="copy-btn" id="credCopyBtn">Copier</button></div>
+        <div class="cred-row"><span class="lbl">Expiration</span><span class="val txt" id="credExpiry">—</span></div>
+        <div class="cred-row"><span class="lbl">Statut</span><span class="val txt ok">● Active</span></div>
+      </div>
+
+      <div class="stats-row">
+        <div class="stat"><div class="sl">Solde restant</div><div class="sv" id="remainingBudget">—</div></div>
+        <div class="stat"><div class="sl">Dépensé / Budget</div><div class="sv sm" id="spendBudget">—</div></div>
+        <div class="stat"><div class="sl">Expiration</div><div class="sv sm" id="expiryDate">—</div></div>
+        <div class="stat"><div class="sl">Modèles</div><div class="sv sm" id="modelsList">—</div></div>
+      </div>
+
+      <div class="charts-grid">
+        <div class="chart-card"><h4>📅 Coût par jour (7j)</h4><div class="chart-wrap"><canvas id="chartDaily"></canvas></div><div class="chart-empty" id="chartDailyEmpty" style="display:none;">Pas encore de données.</div></div>
+        <div class="chart-card"><h4>📈 Coût cumulé (dernières requêtes)</h4><div class="chart-wrap"><canvas id="chartRecent"></canvas></div><div class="chart-empty" id="chartRecentEmpty" style="display:none;">Pas encore de requête.</div></div>
+      </div>
+
+      <h3 style="font-size:16px;margin:8px 0 10px;">🕒 Dernières requêtes</h3>
+      <table class="logs-table">
+        <thead><tr><th>Modèle</th><th>Tokens (I/O)</th><th>Coût</th><th>Date</th></tr></thead>
+        <tbody id="usageTableBody"><tr><td colspan="4" class="muted" style="text-align:center;padding:20px;">Aucune requête</td></tr></tbody>
+      </table>
+
+      <div class="chat-section">
+        <div class="chat-head">
+          <h3>💬 Chatground</h3>
+          <div class="chat-controls"><label for="chatModel" style="font-size:13px;">Modèle :</label><select id="chatModel"><option value="">Chargement…</option></select></div>
+        </div>
+        <div class="chat-box" id="chatBox"><div class="msg"><div class="bubble system">Sélectionnez un modèle et écrivez un message pour tester votre clé.</div></div></div>
+        <div class="chat-input-row"><input type="text" id="chatInput" placeholder="Écrivez votre message…" /><button class="btn btn-primary btn-sm" id="chatSendBtn">Envoyer</button><button class="btn btn-light btn-sm" id="chatClearBtn">Effacer</button></div>
+        <div class="chat-info" id="chatInfo"><span></span></div>
+      </div>
+    </section>
+  </main>
+
+  <footer>© 2026 NexusAI — POC démonstratif · Clés API LLM en Mobile Money</footer>
+
+  <script>
+    // ============ STATE ============
+    let PACKS = [];
+    let selectedPackId = null;
+    let pollInterval = null;
+    let currentTransactionRef = null;
+    let S = { key:null, userId:null, alias:null, pseudo:null, packName:null, modelLabels:{}, maxBudget:0, createdAt:null, duration:null };
+    let chatMessages = [];
+    let chartDailyInstance = null, chartRecentInstance = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    // ============ NAVIGATION ============
+    function go(screen) {
+      ['Landing','Buy','Login','Dash'].forEach(s => $('screen'+s).classList.toggle('active', s.toLowerCase()===screen));
+      window.scrollTo({top:0, behavior:'smooth'});
+      renderNav(screen);
+    }
+    function renderNav(screen) {
+      const links = $('navLinks');
+      if (screen === 'dash') {
+        links.innerHTML = `<a href="#" onclick="logout();return false;">Déconnexion</a>`;
+      } else {
+        links.innerHTML = `
+          <a href="#pricingSection" onclick="go('landing');return false;">Offres</a>
+          <button class="btn btn-ghost btn-sm" onclick="go('login')">Connexion</button>
+          <button class="btn btn-primary btn-sm" onclick="go('buy')">Acheter</button>`;
+      }
+    }
+
+    // ============ HEALTH ============
+    async function loadHealth() {
+      try { const d = await (await fetch('/api/health')).json(); $('modeBadge').textContent = d.payment_mode==='simulate' ? '🧪 Simulation' : '🔴 Live'; }
+      catch { $('modeBadge').textContent = '—'; }
+    }
+
+    // ============ PACKS ============
+    async function loadPacks() {
+      try {
+        PACKS = await (await fetch('/api/packs')).json();
+        renderPricing(); renderPackGrid();
+      } catch (e) { $('statusBox').innerHTML = `<div class="err">Erreur: ${e.message}</div>`; }
+    }
+    function friendly(id, labels) { return (labels && labels[id]) ? labels[id] : id.replace(/-free$/i,'').replace(/-/g,' '); }
+    function renderPricing() {
+      $('pricing').innerHTML = '';
+      PACKS.forEach((p,i) => {
+        const c = document.createElement('div');
+        c.className = 'price-card' + (i===PACKS.length-1?' popular':'');
+        c.innerHTML = `
+          <div class="plan">${p.name}</div>
+          <div class="tagline">${p.tagline||''}</div>
+          <div class="amount">${p.price.toLocaleString('fr-FR')} <small>${p.currency}</small></div>
+          <span class="budget">${p.max_budget} USD de crédits</span>
+          <ul class="advantages">${(p.advantages||[]).map(a=>`<li>${a}</li>`).join('')}</ul>
+          <ul class="limits">${(p.limits||[]).map(l=>`<li>${l}</li>`).join('')}</ul>
+          <button class="btn ${i===PACKS.length-1?'btn-primary':'btn-light'}" style="width:100%" onclick="selectPack('${p.id}');go('buy');">Choisir ${p.name}</button>`;
+        $('pricing').appendChild(c);
+      });
+    }
+    function renderPackGrid() {
+      $('packGrid').innerHTML = '';
+      PACKS.forEach(p => {
+        const c = document.createElement('div');
+        c.className = 'pack-card'; c.dataset.id = p.id;
+        c.innerHTML = `<div class="pn">${p.name}</div><div class="pp">${p.price.toLocaleString('fr-FR')} ${p.currency}</div>`;
+        c.onclick = () => { document.querySelectorAll('.pack-card').forEach(x=>x.classList.remove('selected')); c.classList.add('selected'); selectedPackId=p.id; updatePayBtn(); };
+        $('packGrid').appendChild(c);
+      });
+    }
+    function selectPack(id) {
+      selectedPackId = id;
+      document.querySelectorAll('.pack-card').forEach(c => c.classList.toggle('selected', c.dataset.id===id));
+      updatePayBtn();
+    }
+    function updatePayBtn() { $('payBtn').disabled = !selectedPackId || !$('phone').value.trim() || !$('pseudo').value.trim(); }
+
+    // ============ PAYMENT ============
+    async function initiatePayment() {
+      const phone = $('phone').value.trim(), pseudo = $('pseudo').value.trim();
+      if (!selectedPackId || !phone || !pseudo) return;
+      $('payBtn').disabled = true; $('payBtn').textContent = 'Envoi…';
+      $('statusBox').innerHTML = `<div class="pend">⏳ Initiation du paiement…</div>`;
+      try {
+        const r = await fetch('/api/collections/initiate', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({packId:selectedPackId, phone, pseudo, operator:'mtn', country:'BJ'}) });
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.message||'Erreur');
+        currentTransactionRef = d.external_reference || d.transaction_id;
+        $('statusBox').innerHTML = `<div class="pend">⏳ Paiement en attente de validation…<br><small>Référence: ${currentTransactionRef}</small></div>`;
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(checkStatus, 3000);
+        setTimeout(() => { if (pollInterval) { clearInterval(pollInterval); pollInterval=null; $('statusBox').innerHTML += `<div class="err">⏰ Délai dépassé.</div>`; resetPay(); } }, 5*60*1000);
+      } catch(e) { $('statusBox').innerHTML = `<div class="err">❌ ${e.message}</div>`; resetPay(); }
+    }
+    function resetPay() { $('payBtn').disabled = false; $('payBtn').textContent = 'Payer maintenant'; }
+    async function checkStatus() {
+      if (!currentTransactionRef) return;
+      try {
+        const r = await fetch(`/api/collections/status/${currentTransactionRef}`);
+        const d = await r.json();
+        if (!r.ok) throw new Error(d.message||'Erreur');
+        const map = {pending:'⏳ En cours…', approved:'✅ Approuvé !', rejected:'❌ Rejeté'};
+        const cls = d.status==='approved'?'ok':(d.status==='rejected'?'err':'pend');
+        $('statusBox').innerHTML = `<div class="${cls}">${map[d.status]||d.status}</div>`;
+        if (d.status==='approved' && d.key) { clearInterval(pollInterval); pollInterval=null; onPurchased(d); }
+        else if (d.status==='rejected') { clearInterval(pollInterval); pollInterval=null; resetPay(); }
+      } catch(e) { console.warn(e); }
+    }
+
+    // ============ SESSION ============
+    function onPurchased(data) {
+      // Après achat : stocke la session et entre dans le dashboard
+      saveSession(data);
+      enterDashboard(data);
+      resetPay();
+    }
+    function saveSession(d) {
+      S = { key:d.key, userId:d.user_id, alias:d.user_alias||d.pseudo, pseudo:d.pseudo, packName:d.pack_name, modelLabels:d.model_labels||{}, maxBudget:d.max_budget||0, createdAt:d.created_at, duration:d.duration };
+      localStorage.setItem('nexus_session', JSON.stringify(S));
+    }
+    function restoreSession() {
+      try {
+        const raw = localStorage.getItem('nexus_session');
+        if (!raw) return false;
+        const s = JSON.parse(raw);
+        if (!s || !s.key) return false;
+        S = s;
+        return true;
+      } catch { return false; }
+    }
+    function logout() { localStorage.removeItem('nexus_session'); S={key:null}; go('landing'); }
+
+    // ============ LOGIN ============
+    async function doLogin() {
+      const key = $('loginKey').value.trim();
+      if (!key) return;
+      $('loginBtn').disabled = true; $('loginBtn').textContent = 'Vérification…';
+      $('loginStatus').style.display = 'block';
+      $('loginStatus').innerHTML = `<div class="pend">⏳ Vérification de la clé…</div>`;
+      try {
+        const r = await fetch('/api/auth/verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({key}) });
+        const d = await r.json();
+        if (!r.ok || !d.ok) throw new Error(d.error||'Clé invalide');
+        saveSession(d);
+        $('loginStatus').innerHTML = `<div class="ok">✅ Connexion réussie !</div>`;
+        setTimeout(() => enterDashboard(d), 500);
+      } catch(e) {
+        $('loginStatus').innerHTML = `<div class="err">❌ ${e.message}</div>`;
+        $('loginBtn').disabled = false; $('loginBtn').textContent = 'Se connecter';
+      }
+    }
+
+    // ============ DASHBOARD ============
+    function enterDashboard(data) {
+      S = { key:data.key, userId:data.user_id, alias:data.user_alias||data.pseudo, pseudo:data.pseudo, packName:data.pack_name, modelLabels:data.model_labels||{}, maxBudget:data.max_budget||0, createdAt:data.created_at, duration:data.duration };
+      $('welcomeAlias').textContent = S.alias || '—';
+      $('welcomePack').textContent = S.packName || '—';
+      $('welcomeUserId').textContent = S.userId || '—';
+      $('credKey').textContent = S.key;
+      const exp = computeExpiry(S.createdAt, S.duration);
+      $('credExpiry').textContent = exp.label;
+      $('expiryDate').textContent = exp.label;
+      $('remainingBudget').textContent = `${S.maxBudget.toFixed(2)} USD`;
+      $('spendBudget').textContent = `0.0000 / ${S.maxBudget.toFixed(2)} USD`;
+      $('modelsList').textContent = ((data.models||PACKS.find(p=>p.name===S.packName)?.models)||[]).map(m=>friendly(m,S.modelLabels)).join(', ');
+      fillModelSelect((data.models||[]), S.modelLabels);
+      renderCharts([],[],'empty'); renderLogs([]);
+      chatMessages = [];
+      $('chatBox').innerHTML = `<div class="msg"><div class="bubble system">Sélectionnez un modèle et écrivez un message.</div></div>`;
+      go('dash');
+      loadDashboard(S.key);
+    }
+    function computeExpiry(createdAtMs, duration) {
+      if (!duration) return { label:'Illimitée', ts:null };
+      const m = String(duration).match(/^(\d+)([dhmw])$/);
+      if (!m) return { label:'Illimitée', ts:null };
+      const n = parseInt(m[1],10);
+      const unit = {d:86400000,h:3600000,w:604800000,m:2592000000}[m[2]];
+      const ts = (createdAtMs||Date.now()) + n*unit;
+      return { label: new Date(ts).toLocaleDateString('fr-FR'), ts };
+    }
+    function fillModelSelect(models, labels) {
+      const sel = $('chatModel');
+      if (!models || models.length===0) { sel.innerHTML='<option value="">Aucun modèle</option>'; return; }
+      sel.innerHTML = models.map(m=>`<option value="${m}">${friendly(m,labels)}</option>`).join('');
+    }
+    async function loadDashboard(key) {
+      if (!key) return;
+      try {
+        const [infoRes, usageRes, dailyRes] = await Promise.all([
+          fetch(`/api/key-info/${key}`), fetch(`/api/key-usage/${key}?limit=10`), fetch(`/api/key-spend-daily/${key}?days=7`)
+        ]);
+        if (infoRes.ok) {
+          const info = await infoRes.json();
+          const realSpend = info.spend||0;
+          $('remainingBudget').textContent = `${Math.max(0,S.maxBudget-realSpend).toFixed(2)} USD`;
+          $('spendBudget').textContent = `${realSpend.toFixed(4)} / ${S.maxBudget.toFixed(2)} USD`;
+        }
+        const logs = usageRes.ok ? await usageRes.json() : [];
+        const recent = Array.isArray(logs)?logs:(logs.data||[]);
+        renderLogs(recent);
+        const daily = dailyRes.ok ? await dailyRes.json() : { points:[], source:'empty' };
+        renderCharts(recent, daily.points||[], daily.source||'empty');
+      } catch(e) { console.error(e); renderCharts([],[],'empty'); }
+    }
+    function renderLogs(logs) {
+      const tb = $('usageTableBody');
+      if (!logs || !logs.length) { tb.innerHTML = `<tr><td colspan="4" class="muted" style="text-align:center;padding:20px;">Aucune requête</td></tr>`; return; }
+      tb.innerHTML = logs.map(l => {
+        const d = new Date(l.startTime||l.timestamp||l.call_type||Date.now());
+        const tk = `${l.prompt_tokens||l.input_tokens||0} / ${l.completion_tokens||l.output_tokens||0}`;
+        return `<tr><td>${friendly(l.model||'N/A',S.modelLabels)}</td><td>${tk}</td><td>${(l.spend||0).toFixed(6)}</td><td>${d.toLocaleString?d.toLocaleString('fr-FR'):d}</td></tr>`;
+      }).join('');
+    }
+
+    // ============ CHARTS ============
+    function renderCharts(recent, dailyPts, src) {
+      const cd=$('chartDaily'), cr=$('chartRecent'), de=$('chartDailyEmpty'), re=$('chartRecentEmpty');
+      const hd=(dailyPts||[]).some(p=>(p.spend||0)>0), hr=(recent||[]).some(l=>(l.spend||0)>0);
+      de.style.display=hd?'none':'block'; cd.parentElement.style.display=hd?'block':'none';
+      re.style.display=hr?'none':'block'; cr.parentElement.style.display=hr?'block':'none';
+      if (chartDailyInstance){chartDailyInstance.destroy();chartDailyInstance=null;}
+      if (chartRecentInstance){chartRecentInstance.destroy();chartRecentInstance=null;}
+      if (typeof Chart==='undefined') return;
+      if (hd) {
+        chartDailyInstance = new Chart(cd,{type:'bar',data:{labels:dailyPts.map(p=>{const[,m,d]=(p.date||'').split('-');return `${d}/${m}`;}),datasets:[{data:dailyPts.map(p=>Number(p.spend||0)),backgroundColor:'rgba(99,102,241,0.7)',borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+      }
+      if (hr) {
+        const sorted=[...recent].map(l=>({t:l.startTime||l.timestamp||l.call_type||0,s:Number(l.spend||0)})).filter(x=>x.t).sort((a,b)=>new Date(a.t)-new Date(b.t));
+        let cum=0; const cu=sorted.map(x=>(cum+=x.s));
+        chartRecentInstance=new Chart(cr,{type:'line',data:{labels:sorted.map(x=>new Date(x.t).toLocaleTimeString('fr-FR')),datasets:[{data:cu,borderColor:'rgba(6,182,212,0.9)',backgroundColor:'rgba(6,182,212,0.15)',fill:true,tension:0.3,pointRadius:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{y:{beginAtZero:true}}}});
+      }
+    }
+
+    // ============ CHATGROUND ============
+    const chatBox = $('chatBox'), chatInput = $('chatInput'), chatSendBtn = $('chatSendBtn'), chatInfo = $('chatInfo');
+    function md(text) { try { return marked.parse(text||''); } catch { return (text||'').replace(/</g,'&lt;'); } }
+    function appendMsg(role, content) {
+      const wrap = document.createElement('div'); wrap.className = `msg ${role}`;
+      const av = document.createElement('div'); av.className = `avatar ${role}`; av.textContent = role==='user'?'🧑':'⚡';
+      const bub = document.createElement('div'); bub.className = 'bubble';
+      if (role==='assistant') bub.innerHTML = md(content); else bub.textContent = content;
+      wrap.appendChild(av); wrap.appendChild(bub);
+      chatBox.appendChild(wrap); chatBox.scrollTop = chatBox.scrollHeight;
+    }
+    function showTyping() {
+      const w=document.createElement('div'); w.className='msg assistant'; w.id='typingIndicator';
+      const av=document.createElement('div'); av.className='avatar assistant'; av.textContent='⚡';
+      const t=document.createElement('div'); t.className='bubble'; t.innerHTML='<div class="typing"><span></span><span></span><span></span></div>';
+      w.appendChild(av); w.appendChild(t); chatBox.appendChild(w); chatBox.scrollTop=chatBox.scrollHeight;
+    }
+    function hideTyping() { const t=$('typingIndicator'); if (t) t.remove(); }
+    async function sendChat() {
+      if (!S.key) return;
+      const model = $('chatModel').value, text = chatInput.value.trim();
+      if (!text) return; if (!model) { appendMsg('assistant','⚠️ Sélectionnez un modèle.'); return; }
+      appendMsg('user', text);
+      chatMessages.push({role:'user',content:text});
+      chatInput.value=''; chatSendBtn.disabled=true; chatSendBtn.textContent='…';
+      showTyping();
+      try {
+        const r = await fetch('/api/chat', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:S.key,model,messages:chatMessages})});
+        const d = await r.json();
+        hideTyping();
+        if (!r.ok||!d.ok) appendMsg('assistant', `❌ ${d.error||'Erreur'}`);
+        else { appendMsg('assistant', d.content||'(vide)'); chatMessages.push({role:'assistant',content:d.content||''});
+          if (d.usage) chatInfo.innerHTML = `<span>Modèle: ${friendly(d.model,S.modelLabels)} · ${d.usage.total_tokens||'?'} tokens (prompt ${d.usage.prompt_tokens||0} / completion ${d.usage.completion_tokens||0})</span><span>⚠️ Recharger le dashboard pour voir le coût mis à jour</span>`;
+        }
+      } catch(e) { hideTyping(); appendMsg('assistant', `❌ Réseau: ${e.message}`); }
+      finally { chatSendBtn.disabled=false; chatSendBtn.textContent='Envoyer'; }
+    }
+
+    // ============ FAQ ============
+    const FAQ = [
+      {q:'Comment reçois ma clé API ?', a:'Après confirmation de votre paiement Mobile Money, votre clé est générée automatiquement et affichée dans votre dashboard. Vous pouvez la copier immédiatement.'},
+      {q:'Quels modèles sont disponibles ?', a:'Tous nos packs donnent accès à plusieurs modèles : GPT-OSS, Llama 3.3, Qwen, Nemotron. Le pack Pro débloque les gros modèles (120B).'},
+      {q:'Le budget est-il reportable ?', a:'Non. Le budget inclus dans le pack est valable pendant la durée du pack (30 jours). Vous pouvez racheter un pack à tout moment.'},
+      {q:'Puis-je utiliser la clé dans mes propres scripts ?', a:'Oui. L\'API est compatible OpenAI : pointez votre client vers l\'endpoint fourni avec votre clé en header Authorization.'},
+      {q:'Comment me reconnecter à mon dashboard ?', a:'Conservez votre clé API. Sur la page d\'accueil, cliquez sur "J\'ai déjà une clé" et collez-la. Votre session est aussi mémorisée sur cet appareil.'}
+    ];
+    function renderFaq() {
+      $('faq').innerHTML = FAQ.map((f,i) => `
+        <div class="faq-item" id="faq${i}">
+          <div class="faq-q" onclick="document.getElementById('faq${i}').classList.toggle('open')">${f.q}<span class="chev">▼</span></div>
+          <div class="faq-a">${f.a}</div>
+        </div>`).join('');
+    }
+
+    // ============ BINDINGS ============
+    $('payBtn').onclick = initiatePayment;
+    $('pseudo').oninput = updatePayBtn;
+    $('phone').oninput = updatePayBtn;
+    $('loginBtn').onclick = doLogin;
+    $('loginKey').addEventListener('keydown', e => { if (e.key==='Enter') doLogin(); });
+    $('credCopyBtn').onclick = () => { if (S.key) navigator.clipboard.writeText(S.key); };
+    $('refreshDashboardBtn').onclick = () => { if (S.key) loadDashboard(S.key); };
+    $('chatSendBtn').onclick = sendChat;
+    $('chatInput').addEventListener('keydown', e => { if (e.key==='Enter') sendChat(); });
+    $('chatClearBtn').onclick = () => { chatMessages=[]; chatBox.innerHTML=`<div class="msg"><div class="bubble system">Conversation effacée.</div></div>`; chatInfo.innerHTML='<span></span>'; };
+
+    // ============ INIT ============
+    loadHealth();
+    loadPacks();
+    renderFaq();
+    renderNav('landing');
+    if (restoreSession() && S.key) {
+      // Reprise de session : on entre directement dans le dashboard
+      enterDashboard({ key:S.key, user_id:S.userId, user_alias:S.alias, pseudo:S.pseudo, pack_name:S.packName, model_labels:S.modelLabels, max_budget:S.maxBudget, created_at:S.createdAt, duration:S.duration, models: (PACKS.find(p=>p.name===S.packName)?.models)||[] });
+    }
+  </script>
+</body>
+</html>
