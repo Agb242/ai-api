@@ -1,0 +1,81 @@
+# Nginx — Knotflow (marketing + app + sign)
+# Certificat Let's Encrypt : /etc/letsencrypt/live/knotflow.cloud/
+#
+# sudo ln -sf /path/to/knotflow.conf /etc/nginx/sites-enabled/knotflow.conf
+# sudo nginx -t && sudo systemctl reload nginx
+
+# HTTP → HTTPS
+server {
+    listen 80;
+    server_name knotflow.cloud www.knotflow.cloud app.knotflow.cloud sign.knotflow.cloud share.knotflow.cloud;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name knotflow.cloud www.knotflow.cloud app.knotflow.cloud sign.knotflow.cloud share.knotflow.cloud;
+
+    ssl_certificate     /etc/letsencrypt/live/knotflow.cloud/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/knotflow.cloud/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    server_tokens off;
+    add_header X-Content-Type-Options    "nosniff"         always;
+    add_header X-Frame-Options           "SAMEORIGIN"      always;
+    add_header X-XSS-Protection          "1; mode=block"   always;
+    add_header Referrer-Policy           "strict-origin-when-cross-origin" always;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+        allow all;
+    }
+
+    location /_next/static/ {
+        proxy_pass         http://127.0.0.1:3011;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $host;
+        proxy_cache_valid  200 1y;
+        add_header         Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location /_next/webpack-hmr {
+        proxy_pass         http://127.0.0.1:3011;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade    $http_upgrade;
+        proxy_set_header   Connection "upgrade";
+        proxy_set_header   Host       $host;
+        proxy_read_timeout 86400s;
+    }
+
+    location /ws {
+        proxy_pass         http://127.0.0.1:3011;
+        proxy_http_version 1.1;
+        proxy_set_header   Upgrade         $http_upgrade;
+        proxy_set_header   Connection      "upgrade";
+        proxy_set_header   Host            $host;
+        proxy_set_header   X-Real-IP       $remote_addr;
+        proxy_set_header   X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+
+    location / {
+        proxy_pass         http://127.0.0.1:3011;
+        proxy_http_version 1.1;
+
+        # Important : pas de port dans Host — évite app.knotflow.cloud:3011
+        proxy_set_header   Host              $host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto https;
+        proxy_set_header   X-Forwarded-Host  $host;
+        proxy_set_header   Upgrade           $http_upgrade;
+        proxy_set_header   Connection        "upgrade";
+
+        proxy_connect_timeout  60s;
+        proxy_send_timeout     60s;
+        proxy_read_timeout     60s;
+        client_max_body_size   50M;
+    }
+}

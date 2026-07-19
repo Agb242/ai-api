@@ -1,0 +1,41 @@
+# Knotflow — robots.txt
+# https://knotflow.cloud
+
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /_next/
+Disallow: /*/dashboard
+Disallow: /*/settings
+Disallow: /*/profile
+Disallow: /*/processes/*/edit
+Disallow: /*/checklists
+Disallow: /*/executions
+Disallow: /*/members
+Disallow: /*/alerts
+Disallow: /*/analytics
+Disallow: /*/onboarding
+Disallow: /*/onboarding-user
+Disallow: /*/onboardings
+Disallow: /*/positions
+Disallow: /*/templates
+Disallow: /*/transfers
+
+# Allow AI crawlers to index public documentation
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# Sitemap
+Sitemap: https://knotflow.cloud/sitemap.xml
