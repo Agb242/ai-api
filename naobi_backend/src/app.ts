@@ -4,7 +4,7 @@ import bodyParser from 'koa-body';
 import helmet from 'koa-helmet';
 import Router from '@koa/router';
 import routes from './routes';
-import { config } from './config/server';
+import { config, isAllowedCorsOrigin, CORS_ALLOW_HEADERS } from './config/server';
 import { swaggerSpec } from './config/swagger';
 import { koaSwagger } from 'koa2-swagger-ui';
 import { localeMiddleware } from './middleware/locale.middleware';
@@ -39,28 +39,13 @@ app.use(helmet({ contentSecurityPolicy: false }));
 app.use(
   cors({
     origin: (ctx) => {
-      const allowedOrigins = [
-        config.frontendUrl,
-        'http://localhost:3002',
-        'http://localhost:3000',
-      ];
       const origin = ctx.request.header.origin;
-      if (origin && (allowedOrigins.includes(origin) || config.nodeEnv === 'development')) {
-        return origin;
-      }
-      return allowedOrigins[0];
+      if (origin && isAllowedCorsOrigin(origin)) return origin;
+      return config.frontendUrl;
     },
     credentials: true,
     allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowHeaders: [
-      'Content-Type',
-      'Authorization',
-      'Accept',
-      'Accept-Language',
-      'X-Requested-With',
-      'X-Org-ID',
-      'X-API-Key',
-    ],
+    allowHeaders: CORS_ALLOW_HEADERS,
     exposeHeaders: ['Content-Length', 'Content-Type'],
     maxAge: 86400,
   }),

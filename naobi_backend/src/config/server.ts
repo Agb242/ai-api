@@ -87,3 +87,57 @@ export const config = {
 
   encryptionKey: requireEnv('ENCRYPTION_KEY', 'noabi_dev_encryption_key_change_me'),
 };
+
+/** Extra CORS origins (comma-separated), e.g. https://noabi.checkflow.space */
+function corsOriginsFromEnv(): string[] {
+  return (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim().replace(/^['"]|['"]$/g, ''))
+    .filter(Boolean);
+}
+
+const TRUSTED_HOST_SUFFIXES = ['.checkflow.space', '.noabi.cloud', '.knotflow.cloud'];
+const TRUSTED_HOSTS = new Set([
+  'checkflow.space',
+  'noabi.cloud',
+  'knotflow.cloud',
+  'localhost',
+  '127.0.0.1',
+]);
+
+export function listCorsOrigins(): string[] {
+  const base = [
+    config.frontendUrl,
+    'http://localhost:3002',
+    'http://localhost:3000',
+    ...corsOriginsFromEnv(),
+  ].filter(Boolean);
+  return Array.from(new Set(base));
+}
+
+export function isAllowedCorsOrigin(origin: string | undefined): boolean {
+  if (!origin) return false;
+  if (listCorsOrigins().includes(origin)) return true;
+  if (config.nodeEnv === 'development') return true;
+  try {
+    const host = new URL(origin).hostname;
+    if (TRUSTED_HOSTS.has(host)) return true;
+    return TRUSTED_HOST_SUFFIXES.some((s) => host.endsWith(s));
+  } catch {
+    return false;
+  }
+}
+
+/** Headers the SPA sends (incl. X-Org-ID for multi-tenant org context). */
+export const CORS_ALLOW_HEADERS = [
+  'Content-Type',
+  'Authorization',
+  'Accept',
+  'Accept-Language',
+  'X-Requested-With',
+  'X-Org-ID',
+  'x-org-id',
+  'X-API-Key',
+  'x-api-key',
+];
+

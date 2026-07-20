@@ -2,7 +2,7 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import { createAdapter } from '@socket.io/redis-adapter';
 import Redis from 'ioredis';
-import { config } from '../config/server';
+import { config, listCorsOrigins } from '../config/server';
 import { sessionService } from './session.service';
 import { organizationService } from './organization.service';
 import logger from '../config/logger';
@@ -13,7 +13,7 @@ class RealtimeHub {
   initialize(server: HttpServer) {
     this.io = new Server(server, {
       cors: {
-        origin: [config.frontendUrl, 'http://localhost:3002', 'http://localhost:3000'],
+        origin: listCorsOrigins(),
         credentials: true,
       },
       path: '/socket.io',

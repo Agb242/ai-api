@@ -18,6 +18,9 @@ function cookieDomainAttr(hostname: string): string {
   if (hostname === 'knotflow.cloud' || hostname.endsWith('.knotflow.cloud')) {
     return '; Domain=.knotflow.cloud';
   }
+  if (hostname === 'checkflow.space' || hostname.endsWith('.checkflow.space')) {
+    return '; Domain=.checkflow.space';
+  }
   // Host-only cookie (safest default for unknown hosts)
   return '';
 }
