@@ -1,6 +1,6 @@
 apps:
   - script: npm run start
-    name: knotflow.frontend-dev
+    name: naobi-frontend.dev
     restart_delay: 250
     instances : "1"
     exec_mode : "fork"
