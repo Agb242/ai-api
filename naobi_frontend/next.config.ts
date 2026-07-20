@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
             key: 'X-DNS-Prefetch-Control',
             value: 'on',
           },
+          // Required for Google Identity Services (GSI) postMessage/popups.
+          // Nginx must NOT override with Cross-Origin-Opener-Policy: same-origin
+          // (use same-origin-allow-popups or omit the header).
           {
             key: 'Cross-Origin-Opener-Policy',
             value: 'same-origin-allow-popups',

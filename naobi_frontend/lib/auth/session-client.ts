@@ -1,9 +1,8 @@
-import { syncAuthToken } from '../auth-token';
+import { clearAuthTokenCookie, syncAuthToken } from '../auth-token';
 
 /** Clear all client-side session artifacts. Cookie/localStorage are transport only. */
 export function clearAuthCookie(): void {
-  if (typeof window === 'undefined') return;
-  document.cookie = `auth-token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax`;
+  clearAuthTokenCookie();
 }
 
 export function clearAllClientSession(): void {

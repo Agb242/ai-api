@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useLocale, useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import { GoogleLogin } from '@react-oauth/google';
@@ -52,6 +52,22 @@ export function LoginForm({ mode = 'login' }: { mode?: 'login' | 'register' }) {
   const [email, setEmail] = useState(searchParams.get('email') || '');
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const googleBtnRef = useRef<HTMLDivElement>(null);
+  const [googleWidth, setGoogleWidth] = useState(360);
+
+  useLayoutEffect(() => {
+    const el = googleBtnRef.current;
+    if (!el) return;
+    const measure = () => {
+      const w = Math.floor(el.getBoundingClientRect().width);
+      // GSI requires a numeric pixel width (not %)
+      if (w >= 200) setGoogleWidth(Math.min(400, w));
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [step]);
 
   async function finishAuth(authData: any) {
     const token = authData?.token;
@@ -157,14 +173,14 @@ export function LoginForm({ mode = 'login' }: { mode?: 'login' | 'register' }) {
 
       {step === 'email' && (
         <>
-          <div className="mb-4 flex justify-center">
+          <div ref={googleBtnRef} className="mb-4 flex w-full justify-center">
             <GoogleLogin
               onSuccess={handleGoogleSuccess}
               onError={() => toast.error(t('cannotSendCode'))}
               theme="outline"
               shape="rectangular"
               size="large"
-              width="100%"
+              width={String(googleWidth)}
             />
           </div>
           <div className="relative my-5">
