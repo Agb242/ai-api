@@ -29,7 +29,7 @@ export const metadata: Metadata = {
     template: '%s · noabi',
   },
   description:
-    'Une seule API, plusieurs modèles. Gateway LiteLLM, packs Mobile Money, control plane FR/EN.',
+    'Une seule API, plusieurs modèles. Plateforme d’inférence IA, packs Mobile Money, control plane FR/EN.',
 };
 
 export const viewport: Viewport = {

@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
-import { billingApi } from '@/lib/api/billing.api';
+import { modelsApi } from '@/lib/api/models.api';
 import { keysApi } from '@/lib/api/keys.api';
 import { playgroundApi } from '@/lib/api/playground.api';
 import type { ApiKey, ApiKeyCreated } from '@/lib/types/api-key';
@@ -62,7 +62,7 @@ export default function PlaygroundPage() {
   const { data: modelsPayload, error } = useQuery({
     queryKey: ['playground-models', org?.id],
     queryFn: async () => {
-      const res = await billingApi.litellmModels();
+      const res = await modelsApi.list();
       if (!res.success) throw new Error(res.error?.message);
       return res.data as { data?: PlaygroundModel[] };
     },

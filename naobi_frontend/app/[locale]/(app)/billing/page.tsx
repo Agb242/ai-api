@@ -144,7 +144,7 @@ export default function BillingPage() {
             health?.litellm_healthy ? 'text-[hsl(var(--success))]' : 'text-muted-foreground',
           )}
         >
-          LiteLLM · {health?.litellm_healthy ? t('healthy') : t('degraded')}
+          {t('platformStatus')} · {health?.litellm_healthy ? t('healthy') : t('degraded')}
         </span>
       </div>
 

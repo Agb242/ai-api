@@ -50,12 +50,6 @@ export const metricsApi = {
   },
 };
 
-export const modelsApi = {
-  list() {
-    return apiClient.get('/models');
-  },
-};
-
 export const membersApi = {
   list() {
     return apiClient.get('/members');

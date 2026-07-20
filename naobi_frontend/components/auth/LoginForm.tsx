@@ -70,7 +70,7 @@ export function LoginForm({ mode = 'login' }: { mode?: 'login' | 'register' }) {
     const orgs = (Array.isArray(authData?.organizations) ? authData.organizations : []) as Organization[];
     login(user, session, orgs);
 
-    let activeOrg =
+    const activeOrg =
       authData?.active_organization ||
       authData?.default_organization ||
       (orgs.length === 1 ? orgs[0] : null);

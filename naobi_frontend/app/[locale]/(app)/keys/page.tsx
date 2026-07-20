@@ -78,7 +78,7 @@ export default function KeysPage() {
                 <th className="px-4 py-2">{t('prefix')}</th>
                 <th className="px-4 py-2">{t('status')}</th>
                 <th className="px-4 py-2">{t('budget')}</th>
-                <th className="px-4 py-2">LiteLLM</th>
+                <th className="px-4 py-2">{t('platformSpend')}</th>
                 <th className="px-4 py-2" />
               </tr>
             </thead>

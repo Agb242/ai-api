@@ -82,22 +82,6 @@ const FormMessage = React.forwardRef<
 })
 FormMessage.displayName = "FormMessage"
 
-import {
-  Controller,
-  ControllerProps,
-  FieldPath,
-  FieldValues,
-} from "react-hook-form"
-
-const FormField = <
-  TFieldValues extends FieldValues = FieldValues,
-  TName extends FieldPath<TFieldValues> = FieldPath<TFieldValues>
->({
-  ...props
-}: ControllerProps<TFieldValues, TName>) => {
-  return <Controller {...props} />
-}
-
 export {
   Form,
   FormItem,
@@ -105,5 +89,4 @@ export {
   FormControl,
   FormDescription,
   FormMessage,
-  FormField,
 }

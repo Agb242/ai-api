@@ -147,7 +147,7 @@ export class ApiClient {
 
       const payload = json?.data !== undefined ? json.data : json;
       return { success: true, data: payload };
-    } catch (error) {
+    } catch {
       return {
         success: false,
         error: {
@@ -221,7 +221,7 @@ export class ApiClient {
 
         const blob = await response.blob();
         return { success: true, data: blob as T };
-      } catch (error) {
+      } catch {
         return {
           success: false,
           error: {
@@ -383,7 +383,7 @@ export class ApiClient {
 
       const payload = json?.data !== undefined ? json.data : json;
       return { success: true, data: payload };
-    } catch (error) {
+    } catch {
       return {
         success: false,
         error: {
@@ -431,7 +431,7 @@ export class ApiClient {
 
       const payload = json?.data !== undefined ? json.data : json;
       return { success: true, data: payload };
-    } catch (error) {
+    } catch {
       return {
         success: false,
         error: {

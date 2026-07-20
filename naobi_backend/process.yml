@@ -1,6 +1,32 @@
+# PM2 — noabi backend
+#
+# Dev (un seul processus, workers in-process) :
+#   pm2 start process.yml --only naobi-backend.dev
+#
+# Prod (API + worker BullMQ séparés — recommandé) :
+#   npm run build
+#   pm2 start process.yml --only naobi-backend,naobi-worker --env production
+#
 apps:
   - script: npm run dev
     name: naobi-backend.dev
     restart_delay: 250
-    instances : "1"
-    exec_mode : "fork"
+    instances: "1"
+    exec_mode: fork
+    env:
+      NODE_ENV: development
+
+  - script: npm run start
+    name: naobi-backend
+    instances: "1"
+    exec_mode: fork
+    env_production:
+      NODE_ENV: production
+      RUN_BULLMQ_WORKERS: "false"
+
+  - script: npm run worker
+    name: naobi-worker
+    instances: "1"
+    exec_mode: fork
+    env_production:
+      NODE_ENV: production

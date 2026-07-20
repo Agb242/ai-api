@@ -55,6 +55,8 @@ async function checkServices() {
   return { services, allReady };
 }
 
+let bullmqStarted = false;
+
 const server = app.listen(config.port, async () => {
   console.log(`noabi Gateway starting on :${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
@@ -66,8 +68,19 @@ const server = app.listen(config.port, async () => {
   if (!allReady) console.log('Some critical services failed — check logs');
 
   try {
-    await bullmqBootstrap.start();
-    console.log('BullMQ workers: models, spend, cleanup');
+    const runWorkers =
+      process.env.RUN_BULLMQ_WORKERS === 'true' ||
+      (process.env.RUN_BULLMQ_WORKERS !== 'false' && config.nodeEnv !== 'production');
+
+    if (runWorkers) {
+      await bullmqBootstrap.start();
+      bullmqStarted = true;
+      console.log('BullMQ workers: models, spend, key analytics, cleanup (in-process)');
+    } else {
+      console.log(
+        'BullMQ workers disabled in API process — run `npm run worker` (recommended in production)',
+      );
+    }
   } catch (err) {
     console.error('BullMQ failed to start', err);
   }
@@ -81,7 +94,7 @@ const server = app.listen(config.port, async () => {
 
 async function shutdown(signal: string) {
   console.log(`${signal} received, shutting down`);
-  await bullmqBootstrap.stop();
+  if (bullmqStarted) await bullmqBootstrap.stop();
   realtimeHub.close();
   server.close(() => process.exit(0));
 }

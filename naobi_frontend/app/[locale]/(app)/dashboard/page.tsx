@@ -13,6 +13,8 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import { Button } from '@/components/ui/button';
 import { Link } from '@/i18n/routing';
 import { cn } from '@/lib/utils';
+import { ModelCatalogPreview } from '@/components/models/ModelCatalogPreview';
+import type { PlaygroundModel } from '@/lib/types/playground-model';
 
 type LiveRow = {
   id: string;
@@ -112,8 +114,10 @@ export default function DashboardPage() {
     tokens_today: 0,
     latency_avg_ms: 0,
     cost_month: 0,
-    litellm_spend_total: 0,
+    platform_spend_total: 0,
   };
+  const catalogModels = (Array.isArray(data?.models) ? data.models : []) as PlaygroundModel[];
+  const catalogStatus = data?.catalog_status as 'available' | 'degraded' | undefined;
   const budget = data?.budget || { ceiling: null, consumed: 0 };
   const ceiling = budget.ceiling != null ? Number(budget.ceiling) : null;
   const budgetPct =
@@ -190,7 +194,7 @@ export default function DashboardPage() {
           },
           {
             label: t('costMonth'),
-            value: `${Number(metrics.litellm_spend_total ?? metrics.cost_month ?? 0).toFixed(4)}`,
+            value: `${Number(metrics.platform_spend_total ?? metrics.cost_month ?? 0).toFixed(4)}`,
             suffix: ' USD',
           },
         ].map((m) => (
@@ -296,18 +300,10 @@ export default function DashboardPage() {
             <p className="font-mono text-sm text-muted-foreground">—</p>
           )}
         </div>
-        <div className="rounded-xl border border-border bg-card p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <p className="font-display text-sm font-semibold">{t('catalog')}</p>
-            <Button asChild variant="ghost" size="sm" className="h-7 text-xs">
-              <Link href="/keys">{t('manageKeys')}</Link>
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">{t('catalogSub')}</p>
-          <p className="mt-3 font-mono text-sm">
-            {keys.length} key{keys.length === 1 ? '' : 's'}
-          </p>
-        </div>
+        <ModelCatalogPreview
+          models={catalogModels}
+          catalogStatus={catalogStatus}
+        />
       </div>
     </div>
   );

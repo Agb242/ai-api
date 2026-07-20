@@ -7,7 +7,6 @@ import { organizationService } from '../services/organization.service';
 import { RequestLog } from '../models/RequestLog';
 import { OrganizationMember } from '../models/OrganizationMember';
 import { Invitation } from '../models/Invitation';
-import { llmRouter } from '../services/llm/router';
 import { t } from '../i18n/messages';
 import crypto from 'crypto';
 import { knex } from '../config/database';
@@ -21,6 +20,23 @@ function fail(ctx: Context, code: string, status: number, vars?: Record<string, 
   const locale = ctx.state.locale || 'fr';
   ctx.status = status;
   ctx.body = { success: false, error: { message: t(locale, code, vars), code } };
+}
+
+/** Public model catalog DTO — no internal proxy/router fields. */
+function catalogPublicPayload(live: {
+  data?: unknown[];
+  litellm_healthy?: boolean;
+  source?: string;
+}) {
+  const data = Array.isArray(live.data) ? live.data : [];
+  const healthy = Boolean(live.litellm_healthy);
+  return {
+    object: 'list' as const,
+    data,
+    catalog_status: healthy ? ('available' as const) : ('degraded' as const),
+    catalog_source:
+      live.source === 'cache' ? ('cache' as const) : live.source === 'live' ? ('live' as const) : undefined,
+  };
 }
 
 export const orgController = {
@@ -317,7 +333,6 @@ export const metricsController = {
       .limit(20);
 
     const wallet = await walletService.getByOrg(orgId);
-    const routerHealth = await llmRouter.health();
 
     const keys = await knex('api_keys')
       .where({ organization_id: orgId, status: 'active' })
@@ -340,6 +355,7 @@ export const metricsController = {
 
     const { litellmSyncService } = await import('../services/litellm-sync.service');
     const liveModels = await litellmSyncService.liveModels();
+    const catalog = catalogPublicPayload(liveModels);
 
     ok(ctx, {
       metrics: {
@@ -348,16 +364,16 @@ export const metricsController = {
           Number((tokensRow as any)?.input || 0) + Number((tokensRow as any)?.output || 0),
         latency_avg_ms: Math.round(Number((latencyRow as any)?.avg || 0)),
         cost_month: Number((monthCost as any)?.cost || 0),
-        litellm_spend_total: litellmSpendTotal,
+        platform_spend_total: litellmSpendTotal,
       },
       wallet: wallet
         ? { balance: Number(wallet.balance), status: wallet.status, below_alert: walletService.isBelowAlert(wallet) }
         : null,
       recent,
-      models: Array.isArray((liveModels as any)?.data) ? (liveModels as any).data : [],
-      litellm: liveModels,
+      models: catalog.data,
+      catalog_status: catalog.catalog_status,
+      catalog_source: catalog.catalog_source,
       keys,
-      router: routerHealth,
       budget: budgetRow
         ? {
             ceiling: Number(budgetRow.ceiling),
@@ -377,11 +393,11 @@ export const modelsController = {
   async list(ctx: Context) {
     const { litellmSyncService } = await import('../services/litellm-sync.service');
     const live = await litellmSyncService.liveModels();
-    // Return enriched catalog even from cache; FE can show degraded banner via litellm_healthy.
-    if (!live.data?.length && !live.litellm_healthy) {
+    const payload = catalogPublicPayload(live);
+    if (!payload.data.length && payload.catalog_status === 'degraded') {
       return fail(ctx, 'LITELLM_UNAVAILABLE', 503);
     }
-    ok(ctx, live);
+    ok(ctx, payload);
   },
 };
 

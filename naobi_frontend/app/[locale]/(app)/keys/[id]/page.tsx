@@ -45,15 +45,17 @@ function hasValue(v: unknown): boolean {
 
 function SourceBadge({
   source,
-  labelLite,
-  labelGw,
+  labelPlatform,
+  labelApi,
 }: {
   source?: AnalyticsSource | string | null;
-  labelLite: string;
-  labelGw: string;
+  labelPlatform: string;
+  labelApi: string;
 }) {
   if (!source) return null;
-  const text = source === 'litellm' ? labelLite : source === 'gateway' ? labelGw : String(source);
+  const text =
+    source === 'litellm' ? labelPlatform : source === 'gateway' ? labelApi : null;
+  if (!text) return null;
   return (
     <Badge variant="outline" className="text-[10px] font-normal">
       {text}
@@ -204,7 +206,7 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
   const metricCards: Array<{ label: string; value: string; source?: AnalyticsSource }> = [];
   if (hasValue(overview.litellm_spend)) {
     metricCards.push({
-      label: t('litellmSpend'),
+      label: t('platformSpend'),
       value: `${Number(overview.litellm_spend).toFixed(4)} USD`,
       source: 'litellm',
     });
@@ -240,7 +242,7 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
   }
   if (hasValue(overview.litellm_max_budget)) {
     metricCards.push({
-      label: t('litellmBudget'),
+      label: t('platformBudget'),
       value: String(overview.litellm_max_budget),
       source: 'litellm',
     });
@@ -277,7 +279,7 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             <h1 className="font-display text-lg font-semibold">{key.name}</h1>
             <Badge variant="outline">{key.status}</Badge>
             {litellm.blocked === true ? (
-              <Badge variant="destructive">{t('litellmBlocked')}</Badge>
+              <Badge variant="destructive">{t('platformBlocked')}</Badge>
             ) : null}
           </div>
           {key.description ? (
@@ -349,8 +351,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
                 <span className="text-xs text-muted-foreground">{m.label}</span>
                 <SourceBadge
                   source={m.source}
-                  labelLite={t('sourceLiteLLM')}
-                  labelGw={t('sourceGateway')}
+                  labelPlatform={t('sourcePlatform')}
+                  labelApi={t('sourceApiTraffic')}
                 />
               </div>
               <div className="font-mono text-xl font-medium">{m.value}</div>
@@ -365,8 +367,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             <p className="text-sm font-medium">{t('usageSeries')}</p>
             <SourceBadge
               source={usage?.source}
-              labelLite={t('sourceLiteLLM')}
-              labelGw={t('sourceGateway')}
+              labelPlatform={t('sourcePlatform')}
+              labelApi={t('sourceApiTraffic')}
             />
           </div>
           <div className="flex h-28 items-end gap-1">
@@ -398,8 +400,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             <p className="text-sm font-medium">{t('modelsTitle')}</p>
             <SourceBadge
               source={models.source}
-              labelLite={t('sourceLiteLLM')}
-              labelGw={t('sourceGateway')}
+              labelPlatform={t('sourcePlatform')}
+              labelApi={t('sourceApiTraffic')}
             />
           </div>
           <ul className="space-y-2">
@@ -428,8 +430,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             <p className="text-sm font-medium">{t('providersTitle')}</p>
             <SourceBadge
               source={providers.source}
-              labelLite={t('sourceLiteLLM')}
-              labelGw={t('sourceGateway')}
+              labelPlatform={t('sourcePlatform')}
+              labelApi={t('sourceApiTraffic')}
             />
           </div>
           <ul className="space-y-2">
@@ -458,8 +460,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             <p className="text-sm font-medium">{t('logsTitle')}</p>
             <SourceBadge
               source={logs?.source}
-              labelLite={t('sourceLiteLLM')}
-              labelGw={t('sourceGateway')}
+              labelPlatform={t('sourcePlatform')}
+              labelApi={t('sourceApiTraffic')}
             />
           </div>
         </div>
@@ -542,8 +544,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             </p>
             <SourceBadge
               source={errors.source}
-              labelLite={t('sourceLiteLLM')}
-              labelGw={t('sourceGateway')}
+              labelPlatform={t('sourcePlatform')}
+              labelApi={t('sourceApiTraffic')}
             />
           </div>
           <ul className="space-y-2">
