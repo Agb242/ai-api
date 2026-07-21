@@ -63,6 +63,10 @@ function mapGatewayError(ctx: Context, err: any) {
     errorBody(ctx, 'KEY_BUDGET_EXCEEDED', 402);
     return;
   }
+  if (code === 'ORG_BUDGET_EXCEEDED') {
+    errorBody(ctx, 'ORG_BUDGET_EXCEEDED', 402);
+    return;
+  }
   if (code === 'MODEL_NOT_FOUND') {
     errorBody(ctx, 'MODEL_NOT_FOUND', 404);
     return;

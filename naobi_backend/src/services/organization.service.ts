@@ -5,8 +5,47 @@ import { Organization } from '../models/Organization';
 import { OrganizationMember } from '../models/OrganizationMember';
 import { Wallet } from '../models/Wallet';
 import { knex } from '../config/database';
+import { litellmAdmin } from './litellm-admin.service';
+import logger from '../config/logger';
+
+function teamIdForOrg(orgId: string): string {
+  return `org:${orgId}`;
+}
 
 export const organizationService = {
+  teamIdForOrg,
+
+  /**
+   * Ensure LiteLLM team exists for org; persist litellm_team_id.
+   * Soft-fail if LiteLLM down (returns null) — gateway keys can still work via user_id.
+   */
+  async ensureLiteLlmTeam(org: Organization): Promise<string | null> {
+    if (org.litellm_team_id) return org.litellm_team_id;
+
+    const teamId = teamIdForOrg(org.id);
+    if (!litellmAdmin.configured()) {
+      logger.warn('LiteLLM not configured — skip team provision', { orgId: org.id });
+      return null;
+    }
+
+    try {
+      await litellmAdmin.ensureTeam({
+        teamId,
+        teamAlias: (org.name || org.slug || teamId).slice(0, 64),
+      });
+      const updated = await Organization.query().patchAndFetchById(org.id, {
+        litellm_team_id: teamId,
+      });
+      return updated.litellm_team_id || teamId;
+    } catch (err) {
+      logger.warn('Failed to provision LiteLLM team', {
+        orgId: org.id,
+        err: err instanceof Error ? err.message : err,
+      });
+      return null;
+    }
+  },
+
   async createForUser(
     userId: string,
     name: string,
@@ -15,7 +54,7 @@ export const organizationService = {
     const baseSlug = slugify(name, { lower: true, strict: true }) || 'org';
     const slug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`;
 
-    return transaction(knex, async (trx) => {
+    const created = await transaction(knex, async (trx) => {
       const organization = await Organization.query(trx).insert({
         name,
         slug,
@@ -39,6 +78,15 @@ export const organizationService = {
 
       return { organization, member, wallet };
     });
+
+    // Best-effort LiteLLM team (outside trx — network call)
+    await this.ensureLiteLlmTeam(created.organization);
+    const refreshed = await Organization.query().findById(created.organization.id);
+    return {
+      organization: refreshed || created.organization,
+      member: created.member,
+      wallet: created.wallet,
+    };
   },
 
   async listForUser(userId: string) {
@@ -72,5 +120,9 @@ export const organizationService = {
       `${email.split('@')[0]}'s organization`;
     const created = await this.createForUser(userId, name);
     return { ...created.organization, role: 'owner' as const, membership_id: created.member.id };
+  },
+
+  async getById(organizationId: string) {
+    return Organization.query().findById(organizationId);
   },
 };

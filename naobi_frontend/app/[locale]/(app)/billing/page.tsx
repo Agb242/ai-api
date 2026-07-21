@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { cn } from '@/lib/utils';
+import { OrgBudgetsSection } from '@/components/billing/OrgBudgetsSection';
 
 type Pack = {
   id: string;
@@ -147,6 +148,8 @@ export default function BillingPage() {
           {t('platformStatus')} · {health?.litellm_healthy ? t('healthy') : t('degraded')}
         </span>
       </div>
+
+      {org?.id ? <OrgBudgetsSection /> : null}
 
       <section className="grid gap-4 md:grid-cols-2">
         {packs.map((p) => (

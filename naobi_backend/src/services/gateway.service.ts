@@ -151,6 +151,9 @@ export const gatewayService = {
       throw Object.assign(new Error('KEY_BUDGET_EXCEEDED'), { code: 'KEY_BUDGET_EXCEEDED' });
     }
 
+    const { budgetService } = await import('./budget.service');
+    await budgetService.assertOrgAffordable(organization.id);
+
     const modelId =
       (typeof body.model === 'string' && body.model) ||
       (typeof body.model_id === 'string' && body.model_id) ||
@@ -241,6 +244,8 @@ export const gatewayService = {
           model: params.model?.model_id || 'unknown',
         });
         await apiKeyService.addBudgetConsumed(params.apiKey.id, cost);
+        const { budgetService } = await import('./budget.service');
+        await budgetService.addConsumed(params.organization.id, cost);
       } catch (err) {
         logger.error('Failed to debit wallet after successful completion', { err });
       }

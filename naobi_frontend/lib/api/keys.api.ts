@@ -22,7 +22,11 @@ export const keysApi = {
   create(payload: CreateApiKeyPayload) {
     return apiClient.post<ApiKeyCreated>('/keys', payload);
   },
-  update(id: string, payload: { name?: string; description?: string | null }) {
+  update(id: string, payload: {
+    name?: string;
+    description?: string | null;
+    budget_max?: number | null;
+  }) {
     return apiClient.patch<ApiKey>(`/keys/${id}`, payload);
   },
   disable(id: string) {
@@ -33,6 +37,12 @@ export const keysApi = {
   },
   revoke(id: string) {
     return apiClient.post<{ id: string; status: string }>(`/keys/${id}/revoke`, { confirm: true });
+  },
+  rotate(id: string) {
+    return apiClient.post<ApiKeyCreated>(`/keys/${id}/rotate`, { confirm: true });
+  },
+  resetSpend(id: string) {
+    return apiClient.post<ApiKey>(`/keys/${id}/reset-spend`, { confirm: true });
   },
   metrics(id: string) {
     return apiClient.get<ApiKeyMetrics>(`/keys/${id}/metrics`);

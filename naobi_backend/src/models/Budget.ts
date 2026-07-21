@@ -12,6 +12,8 @@ export class Budget extends BaseModel {
   overage_action!: 'block' | 'alert';
   period_starts_at!: string | Date;
   period_ends_at!: string | Date;
+  litellm_budget_id?: string | null;
+  soft_limit_pct?: string | number;
 
   static relationMappings: RelationMappingsThunk = () => ({
     organization: {

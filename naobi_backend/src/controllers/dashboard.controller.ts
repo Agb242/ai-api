@@ -110,17 +110,67 @@ export const keysController = {
   },
 
   async update(ctx: Context) {
-    const body = (ctx.request.body || {}) as { name?: string; description?: string | null };
-    if (body.name === undefined && body.description === undefined) {
+    const body = (ctx.request.body || {}) as {
+      name?: string;
+      description?: string | null;
+      budget_max?: number | null;
+      models?: string[];
+      rpm_limit?: number | null;
+      tpm_limit?: number | null;
+    };
+    if (
+      body.name === undefined &&
+      body.description === undefined &&
+      body.budget_max === undefined &&
+      body.models === undefined &&
+      body.rpm_limit === undefined &&
+      body.tpm_limit === undefined
+    ) {
       return fail(ctx, 'MISSING_FIELDS', 400);
     }
     const key = await apiKeyService.update(ctx.state.orgId!, ctx.params.id, {
       name: body.name,
       description: body.description,
+      budgetMax: body.budget_max,
+      models: body.models,
+      rpmLimit: body.rpm_limit,
+      tpmLimit: body.tpm_limit,
     });
     if (!key) return fail(ctx, 'NOT_FOUND', 404);
     if (key.status === 'revoked') return fail(ctx, 'KEY_REVOKED', 400);
     ok(ctx, apiKeyService.publicKeyFields(key));
+  },
+
+  async rotate(ctx: Context) {
+    const body = (ctx.request.body || {}) as { confirm?: boolean };
+    if (body.confirm !== true) return fail(ctx, 'CONFIRM_REQUIRED', 400);
+    try {
+      const result = await apiKeyService.rotate(ctx.state.orgId!, ctx.params.id);
+      if (!result) return fail(ctx, 'NOT_FOUND', 404);
+      ok(ctx, {
+        ...apiKeyService.publicKeyFields(result.record),
+        key: result.plaintext,
+        message: t(ctx.state.locale || 'fr', 'KEY_ROTATED_OK'),
+      });
+    } catch (err: any) {
+      if (err.code === 'KEY_REVOKED') return fail(ctx, 'KEY_REVOKED', 400);
+      if (err.code === 'KEY_EXPIRED') return fail(ctx, 'KEY_EXPIRED', 400);
+      if (err.code === 'LITELLM_UNAVAILABLE' || err.code === 'LITELLM_NOT_CONFIGURED') {
+        return fail(ctx, err.code, 503);
+      }
+      throw err;
+    }
+  },
+
+  async resetSpend(ctx: Context) {
+    const body = (ctx.request.body || {}) as { confirm?: boolean };
+    if (body.confirm !== true) return fail(ctx, 'CONFIRM_REQUIRED', 400);
+    const key = await apiKeyService.resetSpend(ctx.state.orgId!, ctx.params.id);
+    if (!key) return fail(ctx, 'NOT_FOUND', 404);
+    ok(ctx, {
+      ...apiKeyService.publicKeyFields(key),
+      message: t(ctx.state.locale || 'fr', 'KEY_SPEND_RESET_OK'),
+    });
   },
 
   async disable(ctx: Context) {
@@ -460,5 +510,57 @@ export const membersController = {
 
     await invite.$query().patch({ status: 'accepted' });
     ok(ctx, { organization_id: invite.organization_id, role: invite.role });
+  },
+};
+
+export const budgetsController = {
+  async list(ctx: Context) {
+    const { budgetService } = await import('../services/budget.service');
+    const items = await budgetService.list(ctx.state.orgId!);
+    ok(ctx, items);
+  },
+
+  async create(ctx: Context) {
+    const body = (ctx.request.body || {}) as {
+      ceiling?: number;
+      period?: 'day' | 'week' | 'month';
+      soft_limit_pct?: number;
+      overage_action?: 'block' | 'alert';
+    };
+    if (typeof body.ceiling !== 'number' || body.ceiling < 0) {
+      return fail(ctx, 'MISSING_FIELDS', 400);
+    }
+    const { budgetService } = await import('../services/budget.service');
+    const created = await budgetService.create({
+      organizationId: ctx.state.orgId!,
+      ceiling: body.ceiling,
+      period: body.period,
+      softLimitPct: body.soft_limit_pct,
+      overageAction: body.overage_action,
+    });
+    ok(ctx, { ...created, message: t(ctx.state.locale || 'fr', 'BUDGET_CREATED') }, 201);
+  },
+
+  async update(ctx: Context) {
+    const body = (ctx.request.body || {}) as {
+      ceiling?: number;
+      soft_limit_pct?: number;
+      overage_action?: 'block' | 'alert';
+    };
+    const { budgetService } = await import('../services/budget.service');
+    const updated = await budgetService.update(ctx.state.orgId!, ctx.params.id, {
+      ceiling: body.ceiling,
+      softLimitPct: body.soft_limit_pct,
+      overageAction: body.overage_action,
+    });
+    if (!updated) return fail(ctx, 'NOT_FOUND', 404);
+    ok(ctx, { ...updated, message: t(ctx.state.locale || 'fr', 'BUDGET_UPDATED') });
+  },
+
+  async remove(ctx: Context) {
+    const { budgetService } = await import('../services/budget.service');
+    const okDel = await budgetService.remove(ctx.state.orgId!, ctx.params.id);
+    if (!okDel) return fail(ctx, 'NOT_FOUND', 404);
+    ok(ctx, { id: ctx.params.id, message: t(ctx.state.locale || 'fr', 'BUDGET_DELETED') });
   },
 };

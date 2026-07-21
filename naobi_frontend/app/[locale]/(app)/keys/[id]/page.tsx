@@ -34,7 +34,7 @@ import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
 import type { ApiKeyCreated } from '@/lib/types/api-key';
 
-type ConfirmAction = 'disable' | 'enable' | 'revoke' | null;
+type ConfirmAction = 'disable' | 'enable' | 'revoke' | 'rotate' | 'resetSpend' | null;
 
 function hasValue(v: unknown): boolean {
   if (v === undefined || v === null) return false;
@@ -75,6 +75,8 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
   const [createOpen, setCreateOpen] = useState(false);
   const [reveal, setReveal] = useState<ApiKeyCreated | null>(null);
   const [logPage, setLogPage] = useState(1);
+
+  const [budgetMax, setBudgetMax] = useState('');
 
   const { data: key, isLoading, error } = useQuery({
     queryKey: ['key', id, org?.id],
@@ -149,9 +151,17 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
 
   const updateMut = useMutation({
     mutationFn: async () => {
+      const budgetVal =
+        budgetMax.trim() === ''
+          ? null
+          : Number(budgetMax);
+      if (budgetMax.trim() !== '' && Number.isNaN(budgetVal as number)) {
+        throw new Error(t('budgetInvalid'));
+      }
       const res = await keysApi.update(id, {
         name: name.trim(),
         description: description.trim() || null,
+        budget_max: budgetVal,
       });
       if (!res.success) throw new Error(res.error?.message);
       return res.data;
@@ -167,6 +177,16 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
 
   const actionMut = useMutation({
     mutationFn: async (action: Exclude<ConfirmAction, null>) => {
+      if (action === 'rotate') {
+        const res = await keysApi.rotate(id);
+        if (!res.success || !res.data) throw new Error(res.error?.message);
+        return { action, data: res.data };
+      }
+      if (action === 'resetSpend') {
+        const res = await keysApi.resetSpend(id);
+        if (!res.success) throw new Error(res.error?.message);
+        return { action, data: res.data };
+      }
       const fn =
         action === 'disable'
           ? keysApi.disable
@@ -177,10 +197,21 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
       if (!res.success) throw new Error(res.error?.message);
       return { action, data: res.data };
     },
-    onSuccess: ({ action }) => {
-      toast.success(
-        action === 'revoke' ? t('revoked') : action === 'disable' ? t('disabled') : t('enabled'),
-      );
+    onSuccess: ({ action, data }) => {
+      if (action === 'rotate' && data && 'key' in (data as object)) {
+        setReveal(data as ApiKeyCreated);
+        toast.success(t('rotated'));
+      } else if (action === 'resetSpend') {
+        toast.success(t('spendReset'));
+      } else {
+        toast.success(
+          action === 'revoke'
+            ? t('revoked')
+            : action === 'disable'
+              ? t('disabled')
+              : t('enabled'),
+        );
+      }
       setConfirm(null);
       qc.invalidateQueries({ queryKey: ['key', id] });
       qc.invalidateQueries({ queryKey: ['keys'] });
@@ -192,6 +223,7 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
   function openRename(k: ApiKey) {
     setName(k.name);
     setDescription(k.description || '');
+    setBudgetMax(k.budget_max != null ? String(k.budget_max) : '');
     setRenameOpen(true);
   }
 
@@ -299,6 +331,16 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
             <Button variant="outline" size="sm" onClick={() => setConfirm('enable')}>
               {t('enable')}
             </Button>
+          ) : null}
+          {key.status !== 'revoked' && key.status !== 'expired' ? (
+            <>
+              <Button variant="outline" size="sm" onClick={() => setConfirm('rotate')}>
+                {t('rotate')}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setConfirm('resetSpend')}>
+                {t('resetSpend')}
+              </Button>
+            </>
           ) : null}
           {key.status !== 'revoked' ? (
             <Button variant="outline" size="sm" onClick={() => setConfirm('revoke')}>
@@ -578,6 +620,17 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
                 rows={2}
               />
             </div>
+            <div className="space-y-1.5">
+              <Label>{t('budgetOptional')}</Label>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={budgetMax}
+                onChange={(e) => setBudgetMax(e.target.value)}
+                placeholder="—"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setRenameOpen(false)}>
@@ -598,14 +651,22 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
                 ? t('revokeConfirmTitle')
                 : confirm === 'disable'
                   ? t('disableConfirmTitle')
-                  : t('enableConfirmTitle')}
+                  : confirm === 'rotate'
+                    ? t('rotateConfirmTitle')
+                    : confirm === 'resetSpend'
+                      ? t('resetSpendConfirmTitle')
+                      : t('enableConfirmTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription>
               {confirm === 'revoke'
                 ? t('revokeConfirmBody')
                 : confirm === 'disable'
                   ? t('disableConfirmBody')
-                  : t('enableConfirmBody')}
+                  : confirm === 'rotate'
+                    ? t('rotateConfirmBody')
+                    : confirm === 'resetSpend'
+                      ? t('resetSpendConfirmBody')
+                      : t('enableConfirmBody')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -618,7 +679,11 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
                 ? t('revoke')
                 : confirm === 'disable'
                   ? t('disable')
-                  : t('enable')}
+                  : confirm === 'rotate'
+                    ? t('rotate')
+                    : confirm === 'resetSpend'
+                      ? t('resetSpend')
+                      : t('enable')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

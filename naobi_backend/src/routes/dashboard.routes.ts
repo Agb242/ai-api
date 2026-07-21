@@ -10,6 +10,7 @@ import {
   metricsController,
   modelsController,
   membersController,
+  budgetsController,
 } from '../controllers/dashboard.controller';
 
 const router = new Router();
@@ -24,6 +25,10 @@ router.patch('/keys/:id', authenticate, requireOrg('developer'), keysController.
 router.post('/keys/:id/disable', authenticate, requireOrg('admin'), keysController.disable);
 router.post('/keys/:id/enable', authenticate, requireOrg('admin'), keysController.enable);
 router.post('/keys/:id/revoke', authenticate, requireOrg('admin'), keysController.revoke);
+router.post('/keys/:id/rotate', authenticate, requireOrg('admin'), keysController.rotate);
+router.post('/keys/:id/block', authenticate, requireOrg('admin'), keysController.disable);
+router.post('/keys/:id/unblock', authenticate, requireOrg('admin'), keysController.enable);
+router.post('/keys/:id/reset-spend', authenticate, requireOrg('admin'), keysController.resetSpend);
 router.get('/keys/:id/metrics', authenticate, requireOrg('developer'), keysController.metrics);
 router.get('/keys/:id/analytics', authenticate, requireOrg('developer'), keysController.analytics);
 router.get('/keys/:id/usage', authenticate, requireOrg('developer'), keysController.usage);
@@ -31,6 +36,11 @@ router.get('/keys/:id/models', authenticate, requireOrg('developer'), keysContro
 router.get('/keys/:id/providers', authenticate, requireOrg('developer'), keysController.providers);
 router.get('/keys/:id/logs', authenticate, requireOrg('developer'), keysController.logs);
 router.get('/keys/:id/errors', authenticate, requireOrg('developer'), keysController.errors);
+
+router.get('/budgets', authenticate, requireOrg('viewer'), budgetsController.list);
+router.post('/budgets', authenticate, requireOrg('admin'), budgetsController.create);
+router.patch('/budgets/:id', authenticate, requireOrg('admin'), budgetsController.update);
+router.delete('/budgets/:id', authenticate, requireOrg('admin'), budgetsController.remove);
 
 router.get('/wallet', authenticate, requireOrg('viewer'), walletController.get);
 router.post('/wallet/topup', authenticate, requireOrg('owner'), walletController.topUp);

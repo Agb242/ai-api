@@ -12,6 +12,13 @@ const messages: Record<Locale, Record<string, string>> = {
     REQUEST_BLOCKED: 'Requête bloquée — motif : {rule}.',
     KEY_BUDGET_EXCEEDED:
       'Plafond de la clé atteint pour cette période. Augmentez le plafond ou attendez la prochaine période.',
+    ORG_BUDGET_EXCEEDED:
+      'Plafond budget de l’organisation atteint. Augmentez le plafond ou attendez la prochaine période.',
+    KEY_ROTATED_OK: 'Clé régénérée. Copiez le nouveau secret maintenant.',
+    KEY_SPEND_RESET_OK: 'Consommation de la clé réinitialisée.',
+    BUDGET_CREATED: 'Budget organisation créé.',
+    BUDGET_UPDATED: 'Budget mis à jour.',
+    BUDGET_DELETED: 'Budget supprimé.',
     KEY_EXPIRED: 'Cette clé a expiré le {date}. Créez une nouvelle clé pour continuer.',
     KEY_REVOKED: 'Cette clé a été révoquée.',
     MODEL_UNAVAILABLE:
@@ -54,6 +61,13 @@ const messages: Record<Locale, Record<string, string>> = {
     REQUEST_BLOCKED: 'Request blocked — reason: {rule}.',
     KEY_BUDGET_EXCEEDED:
       'API key ceiling reached for this period. Raise the ceiling or wait for the next period.',
+    ORG_BUDGET_EXCEEDED:
+      'Organization budget ceiling reached. Raise the ceiling or wait for the next period.',
+    KEY_ROTATED_OK: 'Key regenerated. Copy the new secret now.',
+    KEY_SPEND_RESET_OK: 'Key spend reset.',
+    BUDGET_CREATED: 'Organization budget created.',
+    BUDGET_UPDATED: 'Budget updated.',
+    BUDGET_DELETED: 'Budget deleted.',
     KEY_EXPIRED: 'This key expired on {date}. Create a new key to continue.',
     KEY_REVOKED: 'This key has been revoked.',
     MODEL_UNAVAILABLE:

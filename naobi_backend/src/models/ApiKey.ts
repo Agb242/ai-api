@@ -20,6 +20,7 @@ export class ApiKey extends BaseModel {
   last_used_at?: string | Date | null;
   litellm_key_id?: string | null;
   litellm_user_id?: string | null;
+  litellm_key_alias?: string | null;
   litellm_spend?: string | number;
   litellm_synced_at?: string | Date | null;
 

@@ -2,8 +2,11 @@ import crypto from 'crypto';
 import { transaction } from 'objection';
 import { ApiKey, ApiKeyStatus } from '../models/ApiKey';
 import { RequestLog } from '../models/RequestLog';
+import { Organization } from '../models/Organization';
 import { knex } from '../config/database';
 import { litellmAdmin, hashApiKey } from './litellm-admin.service';
+import { organizationService } from './organization.service';
+import logger from '../config/logger';
 
 function publicKeyFields(k: ApiKey) {
   return {
@@ -19,11 +22,16 @@ function publicKeyFields(k: ApiKey) {
     last_used_at: k.last_used_at,
     litellm_spend: (k as any).litellm_spend,
     litellm_synced_at: (k as any).litellm_synced_at,
+    litellm_key_alias: (k as any).litellm_key_alias ?? null,
     created_by: k.created_by,
     organization_id: k.organization_id,
     created_at: k.created_at,
     updated_at: k.updated_at,
   };
+}
+
+function aliasForKey(key: ApiKey): string | undefined {
+  return key.litellm_key_alias || key.litellm_key_id || undefined;
 }
 
 export const apiKeyService = {
@@ -42,8 +50,18 @@ export const apiKeyService = {
     budgetMax?: number | null;
     expiresAt?: Date | null;
     models?: string[];
+    rpmLimit?: number | null;
+    tpmLimit?: number | null;
   }) {
     await litellmAdmin.assertHealthy();
+
+    const org =
+      (await Organization.query().findById(params.organizationId)) ||
+      (null as Organization | null);
+    let teamId: string | null = null;
+    if (org) {
+      teamId = await organizationService.ensureLiteLlmTeam(org);
+    }
 
     const litellmUserId = `org-${params.organizationId.slice(0, 8)}-u-${params.userId.slice(0, 8)}`;
     await litellmAdmin.ensureUser({
@@ -52,12 +70,16 @@ export const apiKeyService = {
       userEmail: `${litellmUserId}@nexusai.local`,
     });
 
+    const keyAlias = `${params.name}-${crypto.randomBytes(3).toString('hex')}`.slice(0, 64);
     const generated = await litellmAdmin.generateKey({
       userId: litellmUserId,
-      keyAlias: `${params.name}-${crypto.randomBytes(3).toString('hex')}`.slice(0, 64),
+      keyAlias,
       models: params.models,
       maxBudget: params.budgetMax ?? null,
       duration: params.expiresAt ? undefined : '365d',
+      teamId,
+      rpmLimit: params.rpmLimit,
+      tpmLimit: params.tpmLimit,
       metadata: {
         organization_id: params.organizationId,
         created_by: params.userId,
@@ -81,7 +103,8 @@ export const apiKeyService = {
       budget_consumed: 0,
       expires_at: params.expiresAt ?? generated.expires ?? null,
       status: 'active',
-      litellm_key_id: generated.token_id || generated.key_name || null,
+      litellm_key_id: generated.token_id || generated.key_name || keyAlias,
+      litellm_key_alias: keyAlias,
       litellm_user_id: litellmUserId,
       litellm_spend: 0,
     } as any);
@@ -103,7 +126,14 @@ export const apiKeyService = {
   async update(
     organizationId: string,
     keyId: string,
-    patch: { name?: string; description?: string | null },
+    patch: {
+      name?: string;
+      description?: string | null;
+      budgetMax?: number | null;
+      models?: string[];
+      rpmLimit?: number | null;
+      tpmLimit?: number | null;
+    },
   ) {
     const key = await this.getById(organizationId, keyId);
     if (!key) return null;
@@ -116,6 +146,34 @@ export const apiKeyService = {
     if (patch.description !== undefined) {
       data.description = patch.description?.trim() || null;
     }
+    if (patch.budgetMax !== undefined) {
+      data.budget_max = patch.budgetMax;
+    }
+
+    const needsLiteLlm =
+      patch.budgetMax !== undefined ||
+      patch.models !== undefined ||
+      patch.rpmLimit !== undefined ||
+      patch.tpmLimit !== undefined;
+
+    if (needsLiteLlm && litellmAdmin.configured()) {
+      const alias = aliasForKey(key);
+      try {
+        await litellmAdmin.updateKey({
+          keyAlias: alias,
+          maxBudget: patch.budgetMax,
+          models: patch.models,
+          rpmLimit: patch.rpmLimit,
+          tpmLimit: patch.tpmLimit,
+        });
+      } catch (err) {
+        logger.warn('LiteLLM key/update failed', {
+          err: err instanceof Error ? err.message : err,
+          keyId,
+        });
+      }
+    }
+
     if (Object.keys(data).length === 0) return key;
     return key.$query().patchAndFetch(data);
   },
@@ -125,6 +183,16 @@ export const apiKeyService = {
     if (!key) return null;
     if (key.status === 'revoked' || key.status === 'expired') return key;
     if (key.status === 'disabled') return key;
+
+    const alias = aliasForKey(key);
+    if (alias && litellmAdmin.configured()) {
+      try {
+        await litellmAdmin.blockKey({ keyAliases: [alias] });
+      } catch (err) {
+        logger.warn('LiteLLM block on disable failed', { err });
+      }
+    }
+
     return key.$query().patchAndFetch({ status: 'disabled' as ApiKeyStatus });
   },
 
@@ -133,7 +201,110 @@ export const apiKeyService = {
     if (!key) return null;
     if (key.status === 'revoked' || key.status === 'expired') return key;
     if (key.status !== 'disabled') return key;
+
+    const alias = aliasForKey(key);
+    if (alias && litellmAdmin.configured()) {
+      try {
+        await litellmAdmin.unblockKey({ keyAliases: [alias] });
+      } catch (err) {
+        logger.warn('LiteLLM unblock on enable failed', { err });
+      }
+    }
+
     return key.$query().patchAndFetch({ status: 'active' as ApiKeyStatus });
+  },
+
+  /** Rotate: regenerate LiteLLM secret; return plaintext once. */
+  async rotate(organizationId: string, keyId: string) {
+    const key = await this.getById(organizationId, keyId);
+    if (!key) return null;
+    if (key.status === 'revoked' || key.status === 'expired') {
+      throw Object.assign(new Error(key.status === 'revoked' ? 'KEY_REVOKED' : 'KEY_EXPIRED'), {
+        code: key.status === 'revoked' ? 'KEY_REVOKED' : 'KEY_EXPIRED',
+      });
+    }
+
+    await litellmAdmin.assertHealthy();
+    const alias = aliasForKey(key);
+    let plaintext: string | undefined;
+    let newTokenId: string | undefined;
+    let newAlias = alias;
+
+    if (alias) {
+      try {
+        const regen = await litellmAdmin.regenerateKey({ keyAlias: alias });
+        plaintext = regen.key || regen.token;
+        newTokenId = regen.token_id || regen.key_name;
+        if (regen.key_alias) newAlias = regen.key_alias;
+      } catch (err) {
+        logger.warn('LiteLLM regenerate failed — fallback delete+generate', {
+          err: err instanceof Error ? err.message : err,
+        });
+      }
+    }
+
+    if (!plaintext) {
+      // Fallback: delete old + generate new under same user
+      if (alias) {
+        try {
+          await litellmAdmin.deleteKeysByAlias([alias]);
+        } catch {
+          /* continue */
+        }
+      }
+      const org = await Organization.query().findById(organizationId);
+      const teamId = org ? await organizationService.ensureLiteLlmTeam(org) : null;
+      const userId =
+        key.litellm_user_id ||
+        `org-${organizationId.slice(0, 8)}-u-${key.created_by.slice(0, 8)}`;
+      const keyAlias =
+        `${key.name}-rot-${crypto.randomBytes(3).toString('hex')}`.slice(0, 64);
+      const generated = await litellmAdmin.generateKey({
+        userId,
+        keyAlias,
+        maxBudget: key.budget_max != null ? Number(key.budget_max) : null,
+        teamId,
+        metadata: { organization_id: organizationId, rotated_from: keyId },
+      });
+      plaintext = generated.key;
+      newTokenId = generated.token_id || generated.key_name || keyAlias;
+      newAlias = keyAlias;
+    }
+
+    const key_hash = hashApiKey(plaintext);
+    const key_prefix = plaintext.slice(0, 12);
+    const record = await key.$query().patchAndFetch({
+      key_hash,
+      key_prefix,
+      litellm_key_id: newTokenId || key.litellm_key_id,
+      litellm_key_alias: newAlias || key.litellm_key_alias,
+      status: 'active',
+    } as any);
+
+    return { record, plaintext };
+  },
+
+  async resetSpend(organizationId: string, keyId: string) {
+    const key = await this.getById(organizationId, keyId);
+    if (!key) return null;
+    if (key.status === 'revoked') return key;
+
+    const alias = aliasForKey(key);
+    if (alias && litellmAdmin.configured()) {
+      try {
+        await litellmAdmin.resetKeySpend({
+          keyAlias: alias,
+          keyId: key.litellm_key_id || undefined,
+        });
+      } catch (err) {
+        logger.warn('LiteLLM reset spend failed', { err });
+      }
+    }
+
+    return key.$query().patchAndFetch({
+      budget_consumed: 0,
+      litellm_spend: 0,
+    } as any);
   },
 
   async revoke(organizationId: string, keyId: string) {
@@ -141,9 +312,10 @@ export const apiKeyService = {
     if (!key) return null;
     if (key.status === 'revoked') return key;
 
-    if (key.litellm_key_id) {
+    const alias = aliasForKey(key);
+    if (alias) {
       try {
-        await litellmAdmin.deleteKeysByAlias([key.litellm_key_id]);
+        await litellmAdmin.deleteKeysByAlias([alias]);
       } catch {
         /* local revoke still proceeds */
       }

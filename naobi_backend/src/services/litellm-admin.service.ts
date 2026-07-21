@@ -125,6 +125,9 @@ export const litellmAdmin = {
     maxBudget?: number | null;
     duration?: string;
     metadata?: Record<string, unknown>;
+    teamId?: string | null;
+    rpmLimit?: number | null;
+    tpmLimit?: number | null;
   }) {
     await this.assertHealthy();
     const keyResp = await fetch(`${config.litellm.baseUrl}/key/generate`, {
@@ -137,6 +140,9 @@ export const litellmAdmin = {
         max_budget: params.maxBudget ?? undefined,
         duration: params.duration || '365d',
         metadata: params.metadata || {},
+        team_id: params.teamId || undefined,
+        rpm_limit: params.rpmLimit ?? undefined,
+        tpm_limit: params.tpmLimit ?? undefined,
       }),
     });
     if (!keyResp.ok) {
@@ -149,6 +155,255 @@ export const litellmAdmin = {
       token_id?: string;
       key_name?: string;
     };
+  },
+
+  async ensureTeam(params: {
+    teamId: string;
+    teamAlias: string;
+    maxBudget?: number | null;
+    models?: string[];
+  }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/team/new`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        team_id: params.teamId,
+        team_alias: params.teamAlias.slice(0, 64),
+        max_budget: params.maxBudget ?? undefined,
+        models: params.models,
+        metadata: { source: 'noabi' },
+      }),
+    });
+    if (!resp.ok && resp.status !== 409) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /team/new ${resp.status}: ${errText}`);
+    }
+    return params.teamId;
+  },
+
+  async teamInfo(teamId: string) {
+    requireConfigured();
+    const resp = await fetch(
+      `${config.litellm.baseUrl}/team/info?team_id=${encodeURIComponent(teamId)}`,
+      { headers: headers() },
+    );
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /team/info ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async updateKey(params: {
+    key?: string;
+    keyAlias?: string;
+    maxBudget?: number | null;
+    models?: string[];
+    rpmLimit?: number | null;
+    tpmLimit?: number | null;
+    metadata?: Record<string, unknown>;
+    teamId?: string | null;
+  }) {
+    await this.assertHealthy();
+    const body: Record<string, unknown> = {};
+    if (params.key) body.key = params.key;
+    if (params.keyAlias) body.key_alias = params.keyAlias;
+    if (params.maxBudget !== undefined) body.max_budget = params.maxBudget;
+    if (params.models) body.models = params.models;
+    if (params.rpmLimit !== undefined) body.rpm_limit = params.rpmLimit;
+    if (params.tpmLimit !== undefined) body.tpm_limit = params.tpmLimit;
+    if (params.metadata) body.metadata = params.metadata;
+    if (params.teamId !== undefined) body.team_id = params.teamId;
+
+    const resp = await fetch(`${config.litellm.baseUrl}/key/update`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /key/update ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async regenerateKey(params: { keyAlias?: string; key?: string }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/key/regenerate`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        key: params.key,
+        key_alias: params.keyAlias,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /key/regenerate ${resp.status}: ${errText}`);
+    }
+    return (await resp.json()) as {
+      key?: string;
+      token?: string;
+      expires?: string;
+      token_id?: string;
+      key_name?: string;
+      key_alias?: string;
+    };
+  },
+
+  async blockKey(params: { keyAliases?: string[]; keys?: string[] }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/key/block`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        key_aliases: params.keyAliases,
+        keys: params.keys,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      logger.warn('LiteLLM /key/block failed', { status: resp.status, errText });
+      return false;
+    }
+    return true;
+  },
+
+  async unblockKey(params: { keyAliases?: string[]; keys?: string[] }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/key/unblock`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        key_aliases: params.keyAliases,
+        keys: params.keys,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      logger.warn('LiteLLM /key/unblock failed', { status: resp.status, errText });
+      return false;
+    }
+    return true;
+  },
+
+  async resetKeySpend(params: { keyAlias?: string; key?: string; keyId?: string }) {
+    await this.assertHealthy();
+    const pathKey = encodeURIComponent(params.key || params.keyId || params.keyAlias || '');
+    if (!pathKey) return false;
+
+    // Prefer path form /key/{key}/reset_spend ; fallback POST body
+    let resp = await fetch(`${config.litellm.baseUrl}/key/${pathKey}/reset_spend`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({}),
+    });
+    if (!resp.ok) {
+      resp = await fetch(`${config.litellm.baseUrl}/key/reset_spend`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          key: params.key,
+          key_alias: params.keyAlias,
+          key_id: params.keyId,
+        }),
+      });
+    }
+    if (!resp.ok) {
+      const errText = await resp.text();
+      logger.warn('LiteLLM reset spend failed', { status: resp.status, errText });
+      return false;
+    }
+    return true;
+  },
+
+  async budgetNew(params: {
+    budgetId?: string;
+    maxBudget: number;
+    softBudget?: number | null;
+    budgetDuration?: string;
+  }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/new`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        budget_id: params.budgetId,
+        max_budget: params.maxBudget,
+        soft_budget: params.softBudget ?? undefined,
+        budget_duration: params.budgetDuration || '30d',
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/new ${resp.status}: ${errText}`);
+    }
+    return (await resp.json()) as { budget_id?: string; [k: string]: unknown };
+  },
+
+  async budgetUpdate(params: {
+    budgetId: string;
+    maxBudget?: number;
+    softBudget?: number | null;
+    budgetDuration?: string;
+  }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/update`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        budget_id: params.budgetId,
+        max_budget: params.maxBudget,
+        soft_budget: params.softBudget ?? undefined,
+        budget_duration: params.budgetDuration,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/update ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async budgetInfo(budgetId: string) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/info`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ budgets: [budgetId] }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/info ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async budgetList() {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/list`, {
+      headers: headers(),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/list ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async budgetDelete(budgetIds: string[]) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/delete`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ id: budgetIds }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/delete ${resp.status}: ${errText}`);
+    }
+    return resp.ok;
   },
 
   async ensureUser(params: { userId: string; userAlias: string; userEmail: string }) {
