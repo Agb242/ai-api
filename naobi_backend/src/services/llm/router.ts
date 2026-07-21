@@ -1,5 +1,6 @@
-import axios, { AxiosError } from 'axios';
 import { Readable } from 'stream';
+import axios, { AxiosError } from 'axios';
+import FormData from 'form-data';
 import { redisClient } from '../../config/redis';
 import { config } from '../../config/server';
 import { LlmModel } from '../../models/LlmModel';
@@ -20,6 +21,23 @@ export interface RouterResult {
   headers: Record<string, string>;
   data?: unknown;
   stream?: Readable;
+  /** Raw buffer for binary responses (audio/speech, file content) */
+  buffer?: Buffer;
+}
+
+export interface ProxyOptions {
+  method: string;
+  /** Path starting with / (e.g. /v1/embeddings) */
+  path: string;
+  body?: unknown;
+  /** When set, sends multipart instead of JSON */
+  formData?: FormData;
+  query?: Record<string, string | undefined>;
+  stream?: boolean;
+  bearerKey?: string;
+  /** Expect binary body (audio, file download) */
+  binary?: boolean;
+  timeoutMs?: number;
 }
 
 const CIRCUIT_KEY = 'nexusia:litellm:circuit';
@@ -31,7 +49,7 @@ async function getCircuitState(): Promise<'closed' | 'open' | 'half-open'> {
     if (state === 'open') return 'open';
     if (state === 'half-open') return 'half-open';
   } catch {
-    /* redis optional for routing decision */
+    /* redis optional */
   }
   return 'closed';
 }
@@ -69,7 +87,6 @@ async function recordLiteLlmSuccess() {
 
 export async function probeLiteLlm(): Promise<boolean> {
   if (!config.litellm.apiKey || !config.litellm.baseUrl) return false;
-  // Align with litellmAdmin.health: try several paths; do NOT trip the circuit on probe alone.
   const { litellmAdmin } = await import('../litellm-admin.service');
   try {
     return await litellmAdmin.health();
@@ -78,58 +95,63 @@ export async function probeLiteLlm(): Promise<boolean> {
   }
 }
 
-async function callLiteLlm(
-  body: ChatCompletionRequest,
-  opts?: { bearerKey?: string },
-): Promise<RouterResult> {
+function buildUrl(path: string, query?: Record<string, string | undefined>): string {
+  const base = config.litellm.baseUrl.replace(/\/$/, '');
+  const p = path.startsWith('/') ? path : `/${path}`;
+  const url = new URL(`${base}${p}`);
+  if (query) {
+    for (const [k, v] of Object.entries(query)) {
+      if (v !== undefined && v !== '') url.searchParams.set(k, v);
+    }
+  }
+  return url.toString();
+}
+
+async function proxyLiteLlm(opts: ProxyOptions): Promise<RouterResult> {
   if (!config.litellm.apiKey || !config.litellm.baseUrl) {
     throw Object.assign(new Error('LITELLM_NOT_CONFIGURED'), { code: 'LITELLM_NOT_CONFIGURED' });
   }
 
   const circuit = await getCircuitState();
-  // Half-open: still attempt the request when circuit is open (models list can be up while
-  // a previous completion timed out). Only hard-fail after repeated completion failures.
   if (circuit === 'open') {
     logger.warn('LiteLLM circuit open — attempting request anyway (half-open)');
   }
 
-  const base = config.litellm.baseUrl.replace(/\/$/, '');
-  const bearer = (opts?.bearerKey || config.litellm.apiKey).trim();
+  const bearer = (opts.bearerKey || config.litellm.apiKey).trim();
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
     Authorization: `Bearer ${bearer}`,
   };
-  // OpenAI-compatible path (same surface as /v1/models)
-  const url = `${base}/v1/chat/completions`;
 
-  if (body.stream) {
-    const res = await axios.post(url, body, {
-      headers,
-      responseType: 'stream',
-      timeout: 120000,
-      validateStatus: () => true,
-    });
-    if (res.status >= 500) {
-      await recordLiteLlmFailure();
-      throw Object.assign(new Error('LITELLM_UNAVAILABLE'), {
-        code: 'LITELLM_UNAVAILABLE',
-        status: res.status,
-      });
-    }
-    await recordLiteLlmSuccess();
-    return {
-      backend: 'litellm',
-      status: res.status,
-      headers: { 'content-type': String(res.headers['content-type'] || 'text/event-stream') },
-      stream: res.data as Readable,
-    };
+  const url = buildUrl(opts.path, opts.query);
+  const method = (opts.method || 'POST').toUpperCase();
+  const timeout = opts.timeoutMs ?? 120000;
+
+  const axiosConfig: Record<string, unknown> = {
+    method,
+    url,
+    headers,
+    timeout,
+    validateStatus: () => true,
+    maxBodyLength: Infinity,
+    maxContentLength: Infinity,
+  };
+
+  if (opts.formData) {
+    Object.assign(headers, opts.formData.getHeaders());
+    axiosConfig.data = opts.formData;
+  } else if (opts.body !== undefined && method !== 'GET' && method !== 'DELETE') {
+    headers['Content-Type'] = 'application/json';
+    axiosConfig.data = opts.body;
   }
 
-  const res = await axios.post(url, body, {
-    headers,
-    timeout: 120000,
-    validateStatus: () => true,
-  });
+  if (opts.stream) {
+    axiosConfig.responseType = 'stream';
+  } else if (opts.binary) {
+    axiosConfig.responseType = 'arraybuffer';
+  }
+
+  const res = await axios(axiosConfig as any);
+
   if (res.status >= 500) {
     await recordLiteLlmFailure();
     throw Object.assign(new Error('LITELLM_UNAVAILABLE'), {
@@ -138,43 +160,96 @@ async function callLiteLlm(
     });
   }
   await recordLiteLlmSuccess();
+
+  const contentType = String(res.headers['content-type'] || '');
+
+  if (opts.stream) {
+    return {
+      backend: 'litellm',
+      status: res.status,
+      headers: { 'content-type': contentType || 'text/event-stream' },
+      stream: res.data as Readable,
+    };
+  }
+
+  if (opts.binary || contentType.includes('audio/') || contentType.includes('octet-stream')) {
+    const buf = Buffer.isBuffer(res.data)
+      ? res.data
+      : Buffer.from(res.data as ArrayBuffer);
+    return {
+      backend: 'litellm',
+      status: res.status,
+      headers: {
+        'content-type': contentType || 'application/octet-stream',
+        ...(res.headers['content-disposition']
+          ? { 'content-disposition': String(res.headers['content-disposition']) }
+          : {}),
+      },
+      buffer: buf,
+    };
+  }
+
   return {
     backend: 'litellm',
     status: res.status,
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': contentType || 'application/json' },
     data: res.data,
   };
 }
 
+function wrapProxyError(err: unknown, context: { path?: string; model?: string }): never {
+  if (
+    (err as any)?.code === 'LITELLM_UNAVAILABLE' ||
+    (err as any)?.code === 'LITELLM_NOT_CONFIGURED'
+  ) {
+    throw err;
+  }
+  const ax = err as AxiosError;
+  const timedOut =
+    ax?.code === 'ECONNABORTED' ||
+    /timeout/i.test(ax?.message || '') ||
+    (err instanceof Error && /timeout/i.test(err.message));
+  logger.warn('LiteLLM proxy failed', {
+    error: err instanceof Error ? err.message : err,
+    code: ax?.code,
+    path: context.path,
+    model: context.model,
+    timedOut,
+  });
+  // fire-and-forget circuit update
+  void recordLiteLlmFailure();
+  throw Object.assign(new Error(timedOut ? 'PROVIDER_ERROR' : 'LITELLM_UNAVAILABLE'), {
+    code: timedOut ? 'PROVIDER_ERROR' : 'LITELLM_UNAVAILABLE',
+    cause: err instanceof Error ? err.message : String(err),
+  });
+}
+
 export const llmRouter = {
-  /** LiteLLM Proxy is the only inference backend. No provider fallback. */
+  /** Generic path proxy to LiteLLM (allowlisted by callers). */
+  async proxy(opts: ProxyOptions): Promise<RouterResult> {
+    try {
+      return await proxyLiteLlm(opts);
+    } catch (err) {
+      wrapProxyError(err, { path: opts.path });
+    }
+  },
+
+  /** Chat completions — thin wrapper kept for existing callers. */
   async forward(
     body: ChatCompletionRequest,
     _catalogModel?: LlmModel,
     opts?: { bearerKey?: string },
   ): Promise<RouterResult> {
     try {
-      return await callLiteLlm(body, opts);
+      return await proxyLiteLlm({
+        method: 'POST',
+        path: '/v1/chat/completions',
+        body,
+        stream: !!body.stream,
+        bearerKey: opts?.bearerKey,
+      });
     } catch (err) {
-      if ((err as any)?.code === 'LITELLM_UNAVAILABLE' || (err as any)?.code === 'LITELLM_NOT_CONFIGURED') {
-        throw err;
-      }
-      const ax = err as AxiosError;
-      const timedOut =
-        ax?.code === 'ECONNABORTED' ||
-        /timeout/i.test(ax?.message || '') ||
-        (err instanceof Error && /timeout/i.test(err.message));
-      logger.warn('LiteLLM forward failed', {
-        error: err instanceof Error ? err.message : err,
-        code: ax?.code,
-        model: body.model,
-        timedOut,
-      });
-      await recordLiteLlmFailure();
-      throw Object.assign(new Error(timedOut ? 'PROVIDER_ERROR' : 'LITELLM_UNAVAILABLE'), {
-        code: timedOut ? 'PROVIDER_ERROR' : 'LITELLM_UNAVAILABLE',
-        cause: err instanceof Error ? err.message : String(err),
-      });
+      wrapProxyError(err, { path: '/v1/chat/completions', model: body.model });
     }
   },
 

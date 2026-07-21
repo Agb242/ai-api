@@ -15,6 +15,9 @@ import { ModelPicker } from '@/components/playground/ModelPicker';
 import { ModelInfoPanel } from '@/components/playground/ModelInfoPanel';
 import { ChatMessage } from '@/components/playground/ChatMessage';
 import { ChatComposer } from '@/components/playground/ChatComposer';
+import { EmbeddingsPanel } from '@/components/playground/EmbeddingsPanel';
+import { ImagePanel } from '@/components/playground/ImagePanel';
+import { AudioPanel } from '@/components/playground/AudioPanel';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
 import { Button } from '@/components/ui/button';
@@ -27,6 +30,7 @@ import { ChevronDown } from 'lucide-react';
 import 'highlight.js/styles/github-dark.css';
 
 type Msg = { role: 'user' | 'assistant' | 'system'; content: string };
+type Modality = 'chat' | 'embeddings' | 'image' | 'audio';
 
 export default function PlaygroundPage() {
   const t = useTranslations('playground');
@@ -36,6 +40,7 @@ export default function PlaygroundPage() {
   const gateway = getGatewayBase();
 
   const [mode, setMode] = useState<'playground' | 'curl'>('playground');
+  const [modality, setModality] = useState<Modality>('chat');
   const [apiKeyId, setApiKeyId] = useState('');
   const [model, setModel] = useState('');
   const [input, setInput] = useState('');
@@ -49,22 +54,25 @@ export default function PlaygroundPage() {
   const [reveal, setReveal] = useState<ApiKeyCreated | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const { data: keys = [] } = useQuery({
-    queryKey: ['keys', org?.id],
+  const {
+    data: modelsPayload,
+    error,
+  } = useQuery({
+    queryKey: ['playground-models', org?.id],
     queryFn: async () => {
-      const res = await keysApi.list();
-      if (!res.success) throw new Error(res.error?.message);
-      return (res.data as ApiKey[]) || [];
+      const res = await modelsApi.list();
+      if (!res.success) throw new Error(res.error?.message || 'models');
+      return res.data!;
     },
     enabled: !!org?.id,
   });
 
-  const { data: modelsPayload, error } = useQuery({
-    queryKey: ['playground-models', org?.id],
+  const { data: keys = [] } = useQuery({
+    queryKey: ['keys', org?.id],
     queryFn: async () => {
-      const res = await modelsApi.list();
-      if (!res.success) throw new Error(res.error?.message);
-      return res.data as { data?: PlaygroundModel[] };
+      const res = await keysApi.list();
+      if (!res.success) throw new Error(res.error?.message || 'keys');
+      return (res.data || []) as ApiKey[];
     },
     enabled: !!org?.id,
   });
@@ -73,30 +81,16 @@ export default function PlaygroundPage() {
     queryKey: ['playground-context', org?.id],
     queryFn: async () => {
       const res = await playgroundApi.context();
-      if (!res.success) throw new Error(res.error?.message);
+      if (!res.success) throw new Error(res.error?.message || 'context');
       return res.data!;
     },
     enabled: !!org?.id,
   });
 
-  const models = useMemo(() => {
-    const list = Array.isArray(modelsPayload?.data) ? modelsPayload.data : [];
-    return list.map((m: any) => ({
-      id: m.id || m.model_id,
-      display_name: m.display_name || m.id || m.model_id,
-      provider: m.provider || 'other',
-      status: m.status || 'available',
-      price_input_per_1k: Number(m.price_input_per_1k || 0),
-      price_output_per_1k: Number(m.price_output_per_1k || 0),
-      context_window: m.context_window ?? null,
-      max_tokens: m.max_tokens ?? null,
-      capabilities: Array.isArray(m.capabilities) ? m.capabilities : ['streaming'],
-      supports_streaming: m.supports_streaming !== false,
-      supports_vision: Boolean(m.supports_vision),
-      supports_tools: Boolean(m.supports_tools),
-      description: m.description ?? null,
-      updated_at: m.updated_at ?? null,
-    })) as PlaygroundModel[];
+  const models: PlaygroundModel[] = useMemo(() => {
+    if (!modelsPayload) return [];
+    if (Array.isArray(modelsPayload)) return modelsPayload as PlaygroundModel[];
+    return ((modelsPayload as any).models || []) as PlaygroundModel[];
   }, [modelsPayload]);
 
   const selectedModel = models.find((m) => m.id === model) || null;
@@ -122,8 +116,41 @@ export default function PlaygroundPage() {
     : user?.email?.slice(0, 2).toUpperCase() || 'U';
 
   const selectedKey = keys.find((k) => k.id === apiKeyId);
-  const curlSnippet = `curl ${gateway}/v1/chat/completions \\
-  -H "Authorization: Bearer $NOABI_API_KEY" \\
+
+  const curlSnippet = useMemo(() => {
+    const keyHint = '$NOABI_API_KEY';
+    if (modality === 'embeddings') {
+      return `curl ${gateway}/v1/embeddings \\
+  -H "Authorization: Bearer ${keyHint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({
+    model: model || 'text-embedding-3-small',
+    input: input.trim() || 'Hello world',
+  })}'`;
+    }
+    if (modality === 'image') {
+      return `curl ${gateway}/v1/images/generations \\
+  -H "Authorization: Bearer ${keyHint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({
+    model: model || 'dall-e-3',
+    prompt: input.trim() || 'A red balloon',
+    n: 1,
+    size: '1024x1024',
+  })}'`;
+    }
+    if (modality === 'audio') {
+      return `curl ${gateway}/v1/audio/speech \\
+  -H "Authorization: Bearer ${keyHint}" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({
+    model: model || 'tts-1',
+    input: input.trim() || 'Bonjour',
+    voice: 'alloy',
+  })}'`;
+    }
+    return `curl ${gateway}/v1/chat/completions \\
+  -H "Authorization: Bearer ${keyHint}" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({
     model: model || 'llama-3.3-70b',
@@ -132,6 +159,7 @@ export default function PlaygroundPage() {
     temperature,
     max_tokens: maxTokens,
   })}'`;
+  }, [modality, gateway, model, input, temperature, maxTokens]);
 
   async function sendChat() {
     if (!apiKeyId || selectedKey?.status !== 'active') {
@@ -232,6 +260,15 @@ export default function PlaygroundPage() {
     }
   }
 
+  const modalityTabs: { id: Modality; label: string }[] = [
+    { id: 'chat', label: t('modChat') },
+    { id: 'embeddings', label: t('modEmbeddings') },
+    { id: 'image', label: t('modImage') },
+    { id: 'audio', label: t('modAudio') },
+  ];
+
+  const keyDisabled = !apiKeyId || selectedKey?.status !== 'active';
+
   return (
     <div className="flex h-[calc(100vh-3.5rem-64px)] flex-col gap-4 p-6 md:p-7">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -271,6 +308,23 @@ export default function PlaygroundPage() {
         </p>
       ) : null}
 
+      <div className="inline-flex flex-wrap rounded-lg border border-border bg-muted p-1">
+        {modalityTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setModality(tab.id)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              modality === tab.id
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
         <div className="space-y-3">
           <ApiKeySelect
@@ -284,70 +338,80 @@ export default function PlaygroundPage() {
         <ModelInfoPanel model={selectedModel} walletBalance={ctx?.wallet_balance} />
       </div>
 
-      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="gap-1 px-0">
-            {t('advanced')}
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition ${advancedOpen ? 'rotate-180' : ''}`}
-            />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label>{t('temperature')}</Label>
-            <Input
-              type="number"
-              min={0}
-              max={2}
-              step={0.1}
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t('maxTokens')}</Label>
-            <Input
-              type="number"
-              min={1}
-              max={128000}
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
-            />
-          </div>
-          <div className="flex items-center gap-2 pt-6">
-            <Switch checked={streamEnabled} onCheckedChange={setStreamEnabled} id="stream" />
-            <Label htmlFor="stream">{t('streamToggle')}</Label>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      {modality === 'chat' ? (
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="gap-1 px-0">
+              {t('advanced')}
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition ${advancedOpen ? 'rotate-180' : ''}`}
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>{t('temperature')}</Label>
+              <Input
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={temperature}
+                onChange={(e) => setTemperature(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('maxTokens')}</Label>
+              <Input
+                type="number"
+                min={1}
+                max={128000}
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(Number(e.target.value))}
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-6">
+              <Switch checked={streamEnabled} onCheckedChange={setStreamEnabled} id="stream" />
+              <Label htmlFor="stream">{t('streamToggle')}</Label>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
 
       {mode === 'playground' ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
-            {messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t('empty')}</p>
-            ) : (
-              messages.map((m, i) => (
-                <ChatMessage
-                  key={i}
-                  role={m.role}
-                  content={m.content}
-                  streaming={streaming && i === messages.length - 1 && m.role === 'assistant'}
-                  userInitials={userInitials}
-                />
-              ))
-            )}
+        modality === 'chat' ? (
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
+              {messages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('empty')}</p>
+              ) : (
+                messages.map((m, i) => (
+                  <ChatMessage
+                    key={i}
+                    role={m.role}
+                    content={m.content}
+                    streaming={streaming && i === messages.length - 1 && m.role === 'assistant'}
+                    userInitials={userInitials}
+                  />
+                ))
+              )}
+            </div>
+            <ChatComposer
+              value={input}
+              onChange={setInput}
+              onSend={() => void sendChat()}
+              onStop={stop}
+              streaming={streaming}
+              disabled={keyDisabled}
+            />
           </div>
-          <ChatComposer
-            value={input}
-            onChange={setInput}
-            onSend={() => void sendChat()}
-            onStop={stop}
-            streaming={streaming}
-            disabled={!apiKeyId || selectedKey?.status !== 'active'}
-          />
-        </div>
+        ) : modality === 'embeddings' ? (
+          <EmbeddingsPanel apiKeyId={apiKeyId} model={model} disabled={keyDisabled} />
+        ) : modality === 'image' ? (
+          <ImagePanel apiKeyId={apiKeyId} model={model} disabled={keyDisabled} />
+        ) : (
+          <AudioPanel apiKeyId={apiKeyId} model={model} disabled={keyDisabled} />
+        )
       ) : (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">

@@ -12,5 +12,19 @@ router.post(
   requireOrg('developer'),
   playgroundController.chatCompletions,
 );
+router.post('/embeddings', authenticate, requireOrg('developer'), playgroundController.embeddings);
+router.post(
+  '/images/generations',
+  authenticate,
+  requireOrg('developer'),
+  playgroundController.imageGenerations,
+);
+router.post('/audio/speech', authenticate, requireOrg('developer'), playgroundController.audioSpeech);
+router.post(
+  '/audio/transcriptions',
+  authenticate,
+  requireOrg('developer'),
+  playgroundController.audioTranscriptions,
+);
 
 export default router;

@@ -4,6 +4,7 @@ import dashboardRoutes from './dashboard.routes';
 import billingRoutes from './billing.routes';
 import playgroundRoutes from './playground.routes';
 import gatewayRoutes from './gateway.routes';
+import passthroughRoutes from './passthrough.routes';
 
 const router = new Router();
 
@@ -20,8 +21,12 @@ api.use(playgroundRoutes.allowedMethods());
 router.use(api.routes());
 router.use(api.allowedMethods());
 
-// OpenAI-compatible paths at root: /v1/chat/completions
+// OpenAI-compatible paths at root: /v1/chat/completions, embeddings, …
 router.use(gatewayRoutes.routes());
 router.use(gatewayRoutes.allowedMethods());
+
+// Curated Anthropic / Google pass-through
+router.use(passthroughRoutes.routes());
+router.use(passthroughRoutes.allowedMethods());
 
 export default router;

@@ -50,7 +50,18 @@ app.use(
     maxAge: 86400,
   }),
 );
-app.use(bodyParser({ jsonLimit: '10mb' }));
+app.use(
+  bodyParser({
+    jsonLimit: '50mb',
+    formLimit: '50mb',
+    textLimit: '50mb',
+    multipart: true,
+    formidable: {
+      maxFileSize: 50 * 1024 * 1024,
+      keepExtensions: true,
+    },
+  }),
+);
 app.use(localeMiddleware);
 
 app.use(routes.routes());
