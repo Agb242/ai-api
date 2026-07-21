@@ -38,6 +38,8 @@ export interface ProxyOptions {
   /** Expect binary body (audio, file download) */
   binary?: boolean;
   timeoutMs?: number;
+  /** Extra headers forwarded to LiteLLM (end-user, tags, …) */
+  extraHeaders?: Record<string, string>;
 }
 
 const CIRCUIT_KEY = 'nexusia:litellm:circuit';
@@ -120,6 +122,7 @@ async function proxyLiteLlm(opts: ProxyOptions): Promise<RouterResult> {
   const bearer = (opts.bearerKey || config.litellm.apiKey).trim();
   const headers: Record<string, string> = {
     Authorization: `Bearer ${bearer}`,
+    ...(opts.extraHeaders || {}),
   };
 
   const url = buildUrl(opts.path, opts.query);

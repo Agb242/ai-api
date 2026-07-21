@@ -152,6 +152,8 @@ export default function PlaygroundPage() {
     return `curl ${gateway}/v1/chat/completions \\
   -H "Authorization: Bearer ${keyHint}" \\
   -H "Content-Type: application/json" \\
+  -H "X-User-Id: user-123" \\
+  -H "X-Tags: app:checkout,env:prod" \\
   -d '${JSON.stringify({
     model: model || 'llama-3.3-70b',
     messages: [{ role: 'user', content: input.trim() || 'Hello' }],

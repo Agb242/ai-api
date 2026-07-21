@@ -36,17 +36,40 @@ export const filtersApi = {
   }) {
     return apiClient.post('/filters/test', payload);
   },
+  audits(page = 1, limit = 50) {
+    return apiClient.get('/filters/audits', { params: { page, limit } });
+  },
+  stats(days = 14) {
+    return apiClient.get('/filters/stats', { params: { days } });
+  },
+};
+
+export const guardrailsApi = {
+  list() {
+    return apiClient.get('/guardrails');
+  },
+  bind(guardrail_ids: string[]) {
+    return apiClient.post('/guardrails/bind', { guardrail_ids });
+  },
+  test(guardrail_id: string, sample: string) {
+    return apiClient.post('/guardrails/test', { guardrail_id, sample });
+  },
 };
 
 export const logsApi = {
-  list(limit = 50) {
-    return apiClient.get('/logs', { params: { limit } });
+  list(limit = 50, filters?: { tag?: string; end_user?: string }) {
+    return apiClient.get('/logs', {
+      params: { limit, tag: filters?.tag, end_user: filters?.end_user },
+    });
   },
 };
 
 export const metricsApi = {
   dashboard() {
     return apiClient.get('/metrics/dashboard');
+  },
+  tags(days = 30) {
+    return apiClient.get('/metrics/tags', { params: { days } });
   },
 };
 

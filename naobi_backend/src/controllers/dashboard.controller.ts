@@ -335,10 +335,19 @@ export const filtersController = {
 export const logsController = {
   async list(ctx: Context) {
     const limit = Math.min(parseInt(String(ctx.query.limit || '50'), 10), 200);
-    const logs = await RequestLog.query()
+    const tag = ctx.query.tag ? String(ctx.query.tag) : undefined;
+    const endUser = ctx.query.end_user ? String(ctx.query.end_user) : undefined;
+    let q = RequestLog.query()
       .where({ organization_id: ctx.state.orgId! })
       .orderBy('created_at', 'desc')
       .limit(limit);
+    if (tag) {
+      q = q.whereRaw(`metadata->'tags' ? ?`, [tag]);
+    }
+    if (endUser) {
+      q = q.whereRaw(`metadata->>'end_user_id' = ?`, [endUser]);
+    }
+    const logs = await q;
     ok(ctx, logs);
   },
 };
@@ -562,5 +571,126 @@ export const budgetsController = {
     const okDel = await budgetService.remove(ctx.state.orgId!, ctx.params.id);
     if (!okDel) return fail(ctx, 'NOT_FOUND', 404);
     ok(ctx, { id: ctx.params.id, message: t(ctx.state.locale || 'fr', 'BUDGET_DELETED') });
+  },
+};
+
+export const attributionController = {
+  async tags(ctx: Context) {
+    const { attributionService } = await import('../services/attribution.service');
+    const days = Math.min(parseInt(String(ctx.query.days || '30'), 10) || 30, 90);
+    ok(ctx, await attributionService.spendByTag(ctx.state.orgId!, days));
+  },
+
+  async endUsersMetrics(ctx: Context) {
+    const { attributionService } = await import('../services/attribution.service');
+    const days = Math.min(parseInt(String(ctx.query.days || '30'), 10) || 30, 90);
+    ok(ctx, await attributionService.endUserActivity(ctx.state.orgId!, days));
+  },
+
+  async listEndUsers(ctx: Context) {
+    const { attributionService } = await import('../services/attribution.service');
+    ok(ctx, await attributionService.listEndUsers(ctx.state.orgId!));
+  },
+
+  async blockEndUser(ctx: Context) {
+    const { attributionService } = await import('../services/attribution.service');
+    const id = decodeURIComponent(ctx.params.id);
+    if (!id) return fail(ctx, 'MISSING_FIELDS', 400);
+    const blocked = await attributionService.blockEndUser(id);
+    if (!blocked) return fail(ctx, 'LITELLM_UNAVAILABLE', 503);
+    ok(ctx, { user_id: id, message: t(ctx.state.locale || 'fr', 'END_USER_BLOCKED') });
+  },
+};
+
+export const auditController = {
+  async list(ctx: Context) {
+    const { auditService } = await import('../services/audit.service');
+    const source = String(ctx.query.source || 'all') as 'all' | 'gateway' | 'filter' | 'litellm';
+    const page = parseInt(String(ctx.query.page || '1'), 10) || 1;
+    const limit = parseInt(String(ctx.query.limit || '50'), 10) || 50;
+    ok(ctx, await auditService.list(ctx.state.orgId!, { source, page, limit }));
+  },
+
+  async exportCsv(ctx: Context) {
+    const { auditService } = await import('../services/audit.service');
+    const source = String(ctx.query.source || 'all') as 'all' | 'gateway' | 'filter' | 'litellm';
+    const result = await auditService.list(ctx.state.orgId!, { source, page: 1, limit: 500 });
+    const csv = auditService.toCsv(result.items);
+    ctx.set('Content-Type', 'text/csv; charset=utf-8');
+    ctx.set('Content-Disposition', 'attachment; filename="audit-export.csv"');
+    ctx.status = 200;
+    ctx.body = csv;
+  },
+};
+
+export const guardrailsController = {
+  async list(ctx: Context) {
+    const { litellmAdmin } = await import('../services/litellm-admin.service');
+    const { Organization } = await import('../models/Organization');
+    const org = await Organization.query().findById(ctx.state.orgId!);
+    const platform = await litellmAdmin.guardrailsList();
+    ok(ctx, {
+      bound_ids: Array.isArray(org?.litellm_guardrail_ids) ? org!.litellm_guardrail_ids : [],
+      platform,
+    });
+  },
+
+  async bind(ctx: Context) {
+    const body = (ctx.request.body || {}) as { guardrail_ids?: string[] };
+    if (!Array.isArray(body.guardrail_ids)) return fail(ctx, 'MISSING_FIELDS', 400);
+    const { Organization } = await import('../models/Organization');
+    const org = await Organization.query().findById(ctx.state.orgId!);
+    if (!org) return fail(ctx, 'NOT_FOUND', 404);
+    const updated = await org.$query().patchAndFetch({
+      litellm_guardrail_ids: body.guardrail_ids,
+    } as any);
+    ok(ctx, {
+      litellm_guardrail_ids: updated.litellm_guardrail_ids,
+      message: t(ctx.state.locale || 'fr', 'GUARDRAILS_BOUND'),
+    });
+  },
+
+  async test(ctx: Context) {
+    const body = (ctx.request.body || {}) as { guardrail_id?: string; sample?: string };
+    if (!body.guardrail_id || !body.sample) return fail(ctx, 'MISSING_FIELDS', 400);
+    const { litellmAdmin } = await import('../services/litellm-admin.service');
+    const result = await litellmAdmin.applyGuardrail({
+      guardrailName: body.guardrail_id,
+      texts: [body.sample],
+    });
+    if (!result) return fail(ctx, 'LITELLM_UNAVAILABLE', 503);
+    ok(ctx, result);
+  },
+};
+
+export const accessGroupsController = {
+  async list(ctx: Context) {
+    const { litellmAdmin } = await import('../services/litellm-admin.service');
+    const groups = await litellmAdmin.accessGroupList();
+    ok(ctx, groups || []);
+  },
+};
+
+export const complianceController = {
+  async export(ctx: Context) {
+    const { litellmAdmin } = await import('../services/litellm-admin.service');
+    const { Organization } = await import('../models/Organization');
+    const org = await Organization.query().findById(ctx.state.orgId!);
+    const gdpr = await litellmAdmin.complianceGdpr({ organization_id: ctx.state.orgId });
+    const euAiAct = await litellmAdmin.complianceEuAiAct({ organization_id: ctx.state.orgId });
+    const checklist = {
+      org_id: org?.id,
+      org_name: org?.name,
+      litellm_team_id: (org as any)?.litellm_team_id || null,
+      litellm_guardrail_ids: org?.litellm_guardrail_ids || [],
+      data_residency_note: 'Gateway logs retained in platform DB; LiteLLM proxy holds spend/audit.',
+      generated_at: new Date().toISOString(),
+    };
+    ok(ctx, {
+      message: t(ctx.state.locale || 'fr', 'COMPLIANCE_EXPORT_OK'),
+      gdpr,
+      eu_ai_act: euAiAct,
+      checklist,
+    });
   },
 };

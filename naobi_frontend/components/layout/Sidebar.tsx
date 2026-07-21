@@ -14,6 +14,8 @@ import {
   X,
   CreditCard,
   MessageSquare,
+  FileSearch,
+  Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
@@ -32,10 +34,12 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { icon: LayoutDashboard, labelKey: 'dashboard' as const, href: '/dashboard' },
     { icon: KeyRound, labelKey: 'keys' as const, href: '/keys' },
     { icon: ScrollText, labelKey: 'logs' as const, href: '/logs' },
+    { icon: FileSearch, labelKey: 'audit' as const, href: '/audit' },
     { icon: MessageSquare, labelKey: 'playground' as const, href: '/playground' },
     { icon: Shield, labelKey: 'filters' as const, href: '/filters' },
     { icon: Boxes, labelKey: 'models' as const, href: '/models' },
     { icon: CreditCard, labelKey: 'billing' as const, href: '/billing' },
+    { icon: Scale, labelKey: 'compliance' as const, href: '/compliance' },
     { icon: Wallet, labelKey: 'wallet' as const, href: '/wallet' },
     { icon: Users, labelKey: 'team' as const, href: '/members' },
   ];

@@ -16,5 +16,6 @@ export class Pack extends BaseModel {
   tpm_limit?: number | null;
   advantages?: string[];
   limits?: string[];
+  litellm_access_group_id?: string | null;
   active!: boolean;
 }

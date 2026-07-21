@@ -1,9 +1,12 @@
 import { FilterRule, FilterAction } from '../models/FilterRule';
+import { Organization } from '../models/Organization';
 import { knex } from '../config/database';
+import { litellmAdmin } from './litellm-admin.service';
+import logger from '../config/logger';
 
 export interface FilterResult {
   action: 'pass' | 'block' | 'redact';
-  rule?: FilterRule;
+  rule?: { id: string; name: string };
   content: string;
 }
 
@@ -158,6 +161,90 @@ export const filterService = {
     }
 
     return { result: { action: 'pass', content: text }, payload: current };
+  },
+
+  /**
+   * Local filters first, then optional LiteLLM guardrails bound on the org.
+   */
+  async evaluateWithGuardrails(
+    organization: Organization,
+    payload: any,
+  ): Promise<{ result: FilterResult; payload: any }> {
+    const local = await this.evaluate(organization.id, payload);
+    if (local.result.action === 'block') return local;
+
+    const ids = Array.isArray(organization.litellm_guardrail_ids)
+      ? (organization.litellm_guardrail_ids as string[])
+      : [];
+    if (!ids.length || !litellmAdmin.configured()) return local;
+
+    const text =
+      local.result.content ||
+      (typeof payload?.input === 'string' ? payload.input : JSON.stringify(payload));
+
+    for (const gid of ids) {
+      try {
+        const applied = await litellmAdmin.applyGuardrail({
+          guardrailName: gid,
+          texts: [text],
+          requestData: { model: payload?.model },
+        });
+        if (applied?.blocked) {
+          return {
+            result: {
+              action: 'block',
+              rule: { id: `guardrail:${gid}`, name: `guardrail:${gid}` },
+              content: text,
+            },
+            payload: local.payload,
+          };
+        }
+      } catch (err) {
+        logger.warn('Guardrail apply skipped', { gid, err });
+      }
+    }
+
+    return local;
+  },
+
+  async listAudits(organizationId: string, opts?: { page?: number; limit?: number }) {
+    const page = Math.max(1, opts?.page || 1);
+    const limit = Math.min(100, Math.max(1, opts?.limit || 50));
+    const offset = (page - 1) * limit;
+    const q = knex('filter_audit_logs').where({ organization_id: organizationId });
+    const countRow = (await q.clone().count('* as count').first()) as any;
+    const total = Number(countRow?.count || 0);
+    const items = await q.clone().orderBy('created_at', 'desc').offset(offset).limit(limit);
+    return {
+      items,
+      pagination: { page, limit, total, pages: Math.ceil(total / limit) || 1 },
+    };
+  },
+
+  async blockStats(organizationId: string, days = 14) {
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+    const series = await knex('request_logs')
+      .where({ organization_id: organizationId, status: 'blocked' })
+      .where('created_at', '>=', since.toISOString())
+      .select(
+        knex.raw("date_trunc('day', created_at)::date as day"),
+        knex.raw('count(*)::int as blocks'),
+      )
+      .groupByRaw("date_trunc('day', created_at)::date")
+      .orderByRaw('day asc');
+
+    const auditCount = await knex('filter_audit_logs')
+      .where({ organization_id: organizationId, action: 'block' })
+      .where('created_at', '>=', since.toISOString())
+      .count('* as count')
+      .first();
+
+    return {
+      days,
+      series: (series as any[]).map((r) => ({ day: r.day, blocks: Number(r.blocks || 0) })),
+      total_blocks: Number((auditCount as any)?.count || 0),
+    };
   },
 
   async audit(params: {

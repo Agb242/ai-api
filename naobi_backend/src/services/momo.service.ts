@@ -116,15 +116,29 @@ export const momoService = {
     }
 
     try {
+      let models: string[] = Array.isArray(pack.models)
+        ? pack.models
+        : typeof pack.models === 'string'
+          ? JSON.parse(pack.models)
+          : [];
+
+      if (pack.litellm_access_group_id) {
+        const group = await litellmAdmin.accessGroupGet(pack.litellm_access_group_id);
+        const fromGroup =
+          (Array.isArray((group as any)?.models) && (group as any).models) ||
+          (Array.isArray((group as any)?.model_names) && (group as any).model_names) ||
+          (Array.isArray((group as any)?.data?.models) && (group as any).data.models) ||
+          null;
+        if (fromGroup?.length) {
+          models = fromGroup.map(String);
+        }
+      }
+
       const prov = await litellmAdmin.provisionUserAndKey({
         pseudo: tx.pseudo || 'user',
         phone: tx.phone,
         externalRef,
-        models: Array.isArray(pack.models)
-          ? pack.models
-          : typeof pack.models === 'string'
-            ? JSON.parse(pack.models)
-            : [],
+        models,
         maxBudget: Number(pack.max_budget_usd),
         duration: pack.duration,
         rpmLimit: pack.rpm_limit || undefined,

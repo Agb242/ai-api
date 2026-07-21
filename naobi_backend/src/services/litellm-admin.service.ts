@@ -710,7 +710,6 @@ export const litellmAdmin = {
     const unique = [...new Set(paths.filter(Boolean))];
     for (const p of unique) {
       try {
-        // Liveliness is often unauthenticated; try both
         let resp = await fetch(`${config.litellm.baseUrl}${p}`, {
           signal: AbortSignal.timeout(5000),
         });
@@ -725,6 +724,274 @@ export const litellmAdmin = {
       }
     }
     return false;
+  },
+
+  // --- B4/B5/C: tags, customers, audit, guardrails, access groups, compliance ---
+
+  async spendTags(params?: { startDate?: string; endDate?: string }) {
+    if (!this.configured()) return null;
+    try {
+      const q = new URLSearchParams();
+      if (params?.startDate) q.set('start_date', params.startDate);
+      if (params?.endDate) q.set('end_date', params.endDate);
+      const qs = q.toString();
+      const resp = await fetch(
+        `${config.litellm.baseUrl}/spend/tags${qs ? `?${qs}` : ''}`,
+        { headers: headers(), signal: AbortSignal.timeout(20000) },
+      );
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM spend/tags failed', { err });
+      return null;
+    }
+  },
+
+  async globalSpendTags(params?: { startDate?: string; endDate?: string }) {
+    if (!this.configured()) return null;
+    try {
+      const q = new URLSearchParams();
+      if (params?.startDate) q.set('start_date', params.startDate);
+      if (params?.endDate) q.set('end_date', params.endDate);
+      const qs = q.toString();
+      const resp = await fetch(
+        `${config.litellm.baseUrl}/global/spend/tags${qs ? `?${qs}` : ''}`,
+        { headers: headers(), signal: AbortSignal.timeout(20000) },
+      );
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM global/spend/tags failed', { err });
+      return null;
+    }
+  },
+
+  async customerList() {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/customer/list`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM customer/list failed', { err });
+      return null;
+    }
+  },
+
+  async customerBlock(userId: string) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/customer/block`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ user_ids: [userId] }),
+    });
+    return resp.ok;
+  },
+
+  async customerUnblock(userId: string) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/customer/unblock`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ user_ids: [userId] }),
+    });
+    return resp.ok;
+  },
+
+  async customerDailyActivity(params: {
+    userId: string;
+    startDate?: string;
+    endDate?: string;
+  }) {
+    if (!this.configured()) return null;
+    try {
+      const q = new URLSearchParams({ user_id: params.userId });
+      if (params.startDate) q.set('start_date', params.startDate);
+      if (params.endDate) q.set('end_date', params.endDate);
+      const resp = await fetch(
+        `${config.litellm.baseUrl}/customer/daily/activity?${q}`,
+        { headers: headers(), signal: AbortSignal.timeout(20000) },
+      );
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM customer/daily/activity failed', { err });
+      return null;
+    }
+  },
+
+  async auditList(params?: { page?: number; pageSize?: number }) {
+    if (!this.configured()) return null;
+    try {
+      const q = new URLSearchParams();
+      if (params?.page) q.set('page', String(params.page));
+      if (params?.pageSize) q.set('page_size', String(params.pageSize));
+      const qs = q.toString();
+      const resp = await fetch(`${config.litellm.baseUrl}/audit${qs ? `?${qs}` : ''}`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM /audit failed', { err });
+      return null;
+    }
+  },
+
+  async auditGet(id: string) {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/audit/${encodeURIComponent(id)}`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async guardrailsList() {
+    if (!this.configured()) return null;
+    try {
+      let resp = await fetch(`${config.litellm.baseUrl}/v2/guardrails/list`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) {
+        resp = await fetch(`${config.litellm.baseUrl}/guardrails/list`, {
+          headers: headers(),
+          signal: AbortSignal.timeout(15000),
+        });
+      }
+      if (!resp.ok) {
+        resp = await fetch(`${config.litellm.baseUrl}/guardrails`, {
+          headers: headers(),
+          signal: AbortSignal.timeout(15000),
+        });
+      }
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM guardrails list failed', { err });
+      return null;
+    }
+  },
+
+  async applyGuardrail(params: {
+    guardrailName?: string;
+    texts: string[];
+    requestData?: Record<string, unknown>;
+  }): Promise<{ blocked: boolean; message?: string; raw?: unknown } | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/guardrails/apply_guardrail`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          guardrail_name: params.guardrailName,
+          texts: params.texts,
+          request_data: params.requestData,
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!resp.ok) {
+        // try alternate path
+        const alt = await fetch(`${config.litellm.baseUrl}/apply_guardrail`, {
+          method: 'POST',
+          headers: headers(),
+          body: JSON.stringify({
+            guardrail_name: params.guardrailName,
+            texts: params.texts,
+          }),
+          signal: AbortSignal.timeout(20000),
+        });
+        if (!alt.ok) return null;
+        const data = await alt.json();
+        return {
+          blocked: Boolean((data as any)?.blocked || (data as any)?.should_block),
+          message: (data as any)?.message || (data as any)?.reason,
+          raw: data,
+        };
+      }
+      const data = await resp.json();
+      return {
+        blocked: Boolean((data as any)?.blocked || (data as any)?.should_block),
+        message: (data as any)?.message || (data as any)?.reason,
+        raw: data,
+      };
+    } catch (err) {
+      logger.warn('LiteLLM apply_guardrail failed', { err });
+      return null;
+    }
+  },
+
+  async accessGroupList() {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/v1/access_group`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM access_group list failed', { err });
+      return null;
+    }
+  },
+
+  async accessGroupGet(accessGroupId: string) {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(
+        `${config.litellm.baseUrl}/v1/access_group/${encodeURIComponent(accessGroupId)}`,
+        { headers: headers(), signal: AbortSignal.timeout(15000) },
+      );
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async complianceGdpr(payload?: Record<string, unknown>) {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/compliance/gdpr`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(payload || {}),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!resp.ok) return { error: await resp.text(), status: resp.status };
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM compliance/gdpr failed', { err });
+      return null;
+    }
+  },
+
+  async complianceEuAiAct(payload?: Record<string, unknown>) {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/compliance/eu-ai-act`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(payload || {}),
+        signal: AbortSignal.timeout(30000),
+      });
+      if (!resp.ok) return { error: await resp.text(), status: resp.status };
+      return resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM compliance/eu-ai-act failed', { err });
+      return null;
+    }
   },
 
   async deleteKey(rawKey: string) {

@@ -15,6 +15,8 @@ export class Organization extends BaseModel {
   content_retention_days!: number;
   /** LiteLLM team id — alias `org:{uuid}` */
   litellm_team_id?: string | null;
+  /** LiteLLM guardrail ids bound to this org */
+  litellm_guardrail_ids?: string[] | unknown;
 
   static relationMappings: RelationMappingsThunk = () => ({
     members: {

@@ -9,6 +9,10 @@ import {
   normalizeGatewayPath,
   wantsStream,
 } from '../services/llm/endpoint-class';
+import {
+  injectAttributionIntoBody,
+  parseAttributionHeaders,
+} from '../services/llm/attribution-headers';
 import { t } from '../i18n/messages';
 import { realtimeHub } from '../services/realtime.service';
 import logger from '../config/logger';
@@ -82,10 +86,16 @@ async function handleProxy(ctx: Context): Promise<void> {
     classified.multipart &&
     String(ctx.request.headers['content-type'] || '').includes('multipart/form-data');
 
+  const attribution = parseAttributionHeaders(ctx.request.headers as any);
+
   try {
+    let workBody = isMultipart
+      ? rawBody
+      : injectAttributionIntoBody(rawBody, attribution);
+
     const { model, payload, filterResult } = await gatewayService.prepareForClass(
       { apiKey, organization, locale },
-      rawBody,
+      workBody,
       classified,
     );
 
@@ -106,6 +116,7 @@ async function handleProxy(ctx: Context): Promise<void> {
       stream,
       binary: binary && !stream,
       bearerKey: ctx.state.rawApiKey || undefined,
+      extraHeaders: attribution.extraHeaders,
       query: Object.fromEntries(
         Object.entries(ctx.query as Record<string, string | string[]>).map(([k, v]) => [
           k,
@@ -113,6 +124,11 @@ async function handleProxy(ctx: Context): Promise<void> {
         ]),
       ),
     });
+
+    const attrMeta = {
+      end_user_id: attribution.endUserId,
+      tags: attribution.tags,
+    };
 
     if (result.stream) {
       ctx.status = result.status;
@@ -156,6 +172,7 @@ async function handleProxy(ctx: Context): Promise<void> {
             ruleId: filterResult.rule?.id,
             status: result.status >= 400 ? 'error' : 'success',
             endpointClass: classified.class,
+            attribution: attrMeta,
           });
           realtimeHub.emitRequest(organization.id, {
             id: log.id,
@@ -203,6 +220,7 @@ async function handleProxy(ctx: Context): Promise<void> {
           backend: result.backend,
           status: 'success',
           endpointClass: classified.class,
+          attribution: attrMeta,
         });
         realtimeHub.emitRequest(organization.id, {
           id: log.id,
@@ -249,6 +267,7 @@ async function handleProxy(ctx: Context): Promise<void> {
         ruleId: filterResult.rule?.id,
         status: filterResult.action === 'redact' ? 'redacted' : 'success',
         endpointClass: classified.class,
+        attribution: attrMeta,
       });
       if (model) {
         realtimeHub.emitRequest(organization.id, {

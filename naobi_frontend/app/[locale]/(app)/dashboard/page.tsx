@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { io, Socket } from 'socket.io-client';
 import { metricsApi } from '@/lib/api/gateway.api';
 import { keysApi } from '@/lib/api/keys.api';
+import { attributionApi } from '@/lib/api/attribution.api';
 import type { ApiKey, ApiKeyCreated } from '@/lib/types/api-key';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
@@ -75,6 +76,16 @@ export default function DashboardPage() {
       const res = await keysApi.list();
       if (!res.success) throw new Error(res.error?.message);
       return (res.data as ApiKey[]) || [];
+    },
+    enabled: !!org?.id,
+  });
+
+  const { data: tagSpend } = useQuery({
+    queryKey: ['metrics-tags', org?.id],
+    queryFn: async () => {
+      const res = await attributionApi.tags(30);
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data as { local: { tag: string; requests: number; cost: number }[] };
     },
     enabled: !!org?.id,
   });
@@ -298,6 +309,24 @@ export default function DashboardPage() {
             </>
           ) : (
             <p className="font-mono text-sm text-muted-foreground">—</p>
+          )}
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="font-display text-sm font-semibold">{t('tagsTitle')}</p>
+          <p className="mb-3 text-xs text-muted-foreground">{t('tagsSub')}</p>
+          {(tagSpend?.local || []).length === 0 ? (
+            <p className="text-sm text-muted-foreground">{t('tagsEmpty')}</p>
+          ) : (
+            <ul className="space-y-2">
+              {(tagSpend?.local || []).slice(0, 5).map((row) => (
+                <li key={row.tag} className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-xs">{row.tag}</span>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {row.requests} · {Number(row.cost).toFixed(4)}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
         <ModelCatalogPreview

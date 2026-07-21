@@ -49,6 +49,10 @@ const messages: Record<Locale, Record<string, string>> = {
     LITELLM_NOT_CONFIGURED: 'LiteLLM Proxy non configuré sur le serveur.',
     LITELLM_UNAVAILABLE: 'LiteLLM Proxy indisponible. Réessayez plus tard.',
     TOPUP_DISABLED: 'Recharge stub désactivée. Achetez un pack Mobile Money.',
+    END_USER_BLOCKED: 'End-user bloqué sur la plateforme.',
+    AUDIT_EXPORT_OK: 'Export audit prêt.',
+    GUARDRAILS_BOUND: 'Guardrails liés à l’organisation.',
+    COMPLIANCE_EXPORT_OK: 'Export compliance généré.',
   },
   en: {
     INVALID_EMAIL: 'Invalid email',
@@ -98,6 +102,10 @@ const messages: Record<Locale, Record<string, string>> = {
     LITELLM_NOT_CONFIGURED: 'LiteLLM Proxy is not configured on the server.',
     LITELLM_UNAVAILABLE: 'LiteLLM Proxy unavailable. Try again later.',
     TOPUP_DISABLED: 'Stub top-up disabled. Buy a Mobile Money pack.',
+    END_USER_BLOCKED: 'End-user blocked on the platform.',
+    AUDIT_EXPORT_OK: 'Audit export ready.',
+    GUARDRAILS_BOUND: 'Guardrails bound to the organization.',
+    COMPLIANCE_EXPORT_OK: 'Compliance export generated.',
   },
 };
 

@@ -9,6 +9,8 @@
     "logs": "Requêtes",
     "billing": "Facturation",
     "playground": "Playground",
+    "audit": "Audit",
+    "compliance": "Compliance",
     "logout": "Déconnexion",
     "closeMenu": "Fermer le menu",
     "userFallback": "Utilisateur"
@@ -74,6 +76,9 @@
     "catalogStatusDegraded": "Catalogue dégradé",
     "budget": "Budget du mois",
     "budgetSub": "Plafond organisation",
+    "tagsTitle": "Dépense par tag",
+    "tagsSub": "Top tags (30 jours)",
+    "tagsEmpty": "Aucune requête taguée. Envoyez X-Tags depuis votre SDK.",
     "balance": "Solde",
     "credits": "crédits",
     "success": "Succès",
@@ -182,7 +187,31 @@
     "model": "Modèle",
     "status": "Statut",
     "latency": "Latence",
-    "cost": "Coût"
+    "cost": "Coût",
+    "endUser": "End-user",
+    "tags": "Tags",
+    "filterTag": "Tag",
+    "filterEndUser": "End-user",
+    "applyFilters": "Filtrer",
+    "openAudit": "Timeline audit",
+    "exportAudit": "Exporter CSV"
+  },
+  "audit": {
+    "title": "Audit",
+    "subtitle": "Timeline unifiée : gateway, filtres, LiteLLM.",
+    "exportCsv": "Exporter CSV",
+    "empty": "Aucun événement d’audit.",
+    "source_all": "Tout",
+    "source_gateway": "Gateway",
+    "source_filter": "Filtres",
+    "source_litellm": "LiteLLM"
+  },
+  "compliance": {
+    "title": "Compliance",
+    "subtitle": "Export GDPR / EU AI Act et checklist locale (Owner).",
+    "export": "Télécharger l’export",
+    "exporting": "Génération…",
+    "exported": "Export prêt"
   },
   "filters": {
     "title": "Filtres anti-fuite",
@@ -197,7 +226,15 @@
     "sample": "Exemple de texte",
     "activate": "Activer",
     "deactivate": "Désactiver",
-    "empty": "Aucune règle. Protégez les données sensibles avant l'envoi aux fournisseurs."
+    "empty": "Aucune règle. Protégez les données sensibles avant l'envoi aux fournisseurs.",
+    "statsTitle": "Blocages (14 jours)",
+    "statsTotal": "{n} blocages filtre",
+    "guardrailsTitle": "Guardrails plateforme",
+    "guardrailsHint": "Lier des guardrails LiteLLM appliqués après les filtres locaux.",
+    "guardrailsEmpty": "Aucun guardrail plateforme disponible.",
+    "guardrailSample": "Texte d’essai guardrail",
+    "bindGuardrails": "Enregistrer le lien",
+    "guardrailsBound": "Guardrails liés"
   },
   "wallet": {
     "title": "Wallet",

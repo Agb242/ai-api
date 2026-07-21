@@ -179,7 +179,7 @@ export const gatewayService = {
     };
 
     if (classified.applyFilters && !classified.multipart) {
-      const evaluated = await filterService.evaluate(organization.id, body);
+      const evaluated = await filterService.evaluateWithGuardrails(organization, body);
       filterResult = evaluated.result;
       payload = evaluated.payload as Record<string, unknown>;
 
@@ -193,16 +193,22 @@ export const gatewayService = {
           tokens_output: 0,
           cost: 0,
           status: 'blocked',
-          triggered_rule_id: filterResult.rule.id,
+          triggered_rule_id:
+            filterResult.rule.id && !String(filterResult.rule.id).startsWith('guardrail:')
+              ? filterResult.rule.id
+              : null,
           filter_action: 'block',
           streamed: !!body.stream,
+          metadata: { source: filterResult.rule.name?.startsWith('guardrail:') ? 'guardrail' : 'filter' },
         });
-        await filterService.audit({
-          organizationId: organization.id,
-          ruleId: filterResult.rule.id,
-          action: 'block',
-          requestLogId: log.id,
-        });
+        if (filterResult.rule.id && !String(filterResult.rule.id).startsWith('guardrail:')) {
+          await filterService.audit({
+            organizationId: organization.id,
+            ruleId: filterResult.rule.id,
+            action: 'block',
+            requestLogId: log.id,
+          });
+        }
         throw Object.assign(new Error('REQUEST_BLOCKED'), {
           code: 'REQUEST_BLOCKED',
           ruleName: filterResult.rule.name,
@@ -232,6 +238,7 @@ export const gatewayService = {
     status?: string;
     errorCode?: string;
     endpointClass?: EndpointClass;
+    attribution?: { end_user_id?: string; tags?: string[] };
   }) {
     const usage = extractUsage(params.responseData);
     const cost = params.model
@@ -251,6 +258,14 @@ export const gatewayService = {
       }
     }
 
+    const metadata: Record<string, unknown> = {
+      ...(params.endpointClass ? { endpoint_class: params.endpointClass } : {}),
+      ...(params.attribution?.end_user_id
+        ? { end_user_id: params.attribution.end_user_id }
+        : {}),
+      ...(params.attribution?.tags?.length ? { tags: params.attribution.tags } : {}),
+    };
+
     const log = await RequestLog.query().insert({
       organization_id: params.organization.id,
       api_key_id: params.apiKey.id,
@@ -262,11 +277,14 @@ export const gatewayService = {
       cost,
       status: params.status || 'success',
       error_code: params.errorCode || null,
-      triggered_rule_id: params.ruleId || null,
+      triggered_rule_id:
+        params.ruleId && !String(params.ruleId).startsWith('guardrail:')
+          ? params.ruleId
+          : null,
       filter_action: params.filterAction || null,
       router_backend: params.backend,
       streamed: !!(params.body as any)?.stream,
-      metadata: params.endpointClass ? { endpoint_class: params.endpointClass } : {},
+      metadata,
     });
 
     return { log, cost, usage };

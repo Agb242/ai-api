@@ -9,6 +9,8 @@
     "logs": "Requests",
     "billing": "Billing",
     "playground": "Playground",
+    "audit": "Audit",
+    "compliance": "Compliance",
     "logout": "Log out",
     "closeMenu": "Close menu",
     "userFallback": "User"
@@ -74,6 +76,9 @@
     "catalogStatusDegraded": "Catalog degraded",
     "budget": "Month budget",
     "budgetSub": "Organization ceiling",
+    "tagsTitle": "Spend by tag",
+    "tagsSub": "Top tags (30 days)",
+    "tagsEmpty": "No tagged requests yet. Send X-Tags from your SDK.",
     "balance": "Balance",
     "credits": "credits",
     "success": "Success",
@@ -182,7 +187,31 @@
     "model": "Model",
     "status": "Status",
     "latency": "Latency",
-    "cost": "Cost"
+    "cost": "Cost",
+    "endUser": "End-user",
+    "tags": "Tags",
+    "filterTag": "Tag",
+    "filterEndUser": "End-user",
+    "applyFilters": "Filter",
+    "openAudit": "Audit timeline",
+    "exportAudit": "Export CSV"
+  },
+  "audit": {
+    "title": "Audit",
+    "subtitle": "Unified timeline: gateway, filters, LiteLLM.",
+    "exportCsv": "Export CSV",
+    "empty": "No audit events yet.",
+    "source_all": "All",
+    "source_gateway": "Gateway",
+    "source_filter": "Filters",
+    "source_litellm": "LiteLLM"
+  },
+  "compliance": {
+    "title": "Compliance",
+    "subtitle": "Export GDPR / EU AI Act snapshots plus a local checklist (Owner).",
+    "export": "Download export",
+    "exporting": "Generating…",
+    "exported": "Export ready"
   },
   "filters": {
     "title": "Data-leak filters",
@@ -197,7 +226,15 @@
     "sample": "Sample text",
     "activate": "Activate",
     "deactivate": "Deactivate",
-    "empty": "No rules yet. Protect sensitive data before it reaches providers."
+    "empty": "No rules yet. Protect sensitive data before it reaches providers.",
+    "statsTitle": "Blocks (14 days)",
+    "statsTotal": "{n} filter blocks",
+    "guardrailsTitle": "Platform guardrails",
+    "guardrailsHint": "Bind LiteLLM guardrails applied after local filters.",
+    "guardrailsEmpty": "No platform guardrails available.",
+    "guardrailSample": "Sample for guardrail test",
+    "bindGuardrails": "Save binding",
+    "guardrailsBound": "Guardrails bound"
   },
   "wallet": {
     "title": "Wallet",

@@ -11,6 +11,11 @@ import {
   modelsController,
   membersController,
   budgetsController,
+  attributionController,
+  auditController,
+  guardrailsController,
+  accessGroupsController,
+  complianceController,
 } from '../controllers/dashboard.controller';
 
 const router = new Router();
@@ -50,9 +55,53 @@ router.post('/filters', authenticate, requireOrg('admin'), filtersController.cre
 router.patch('/filters/:id', authenticate, requireOrg('admin'), filtersController.update);
 router.delete('/filters/:id', authenticate, requireOrg('admin'), filtersController.remove);
 router.post('/filters/test', authenticate, requireOrg('admin'), filtersController.test);
+router.get('/filters/audits', authenticate, requireOrg('admin'), async (ctx) => {
+  const page = parseInt(String(ctx.query.page || '1'), 10) || 1;
+  const limit = parseInt(String(ctx.query.limit || '50'), 10) || 50;
+  const { filterService } = await import('../services/filter.service');
+  ctx.status = 200;
+  ctx.body = {
+    success: true,
+    data: await filterService.listAudits(ctx.state.orgId!, { page, limit }),
+  };
+});
+router.get('/filters/stats', authenticate, requireOrg('admin'), async (ctx) => {
+  const days = Math.min(parseInt(String(ctx.query.days || '14'), 10) || 14, 90);
+  const { filterService } = await import('../services/filter.service');
+  ctx.status = 200;
+  ctx.body = {
+    success: true,
+    data: await filterService.blockStats(ctx.state.orgId!, days),
+  };
+});
 
 router.get('/logs', authenticate, requireOrg('viewer'), logsController.list);
 router.get('/metrics/dashboard', authenticate, requireOrg('viewer'), metricsController.dashboard);
+router.get('/metrics/tags', authenticate, requireOrg('viewer'), attributionController.tags);
+router.get(
+  '/metrics/end-users',
+  authenticate,
+  requireOrg('viewer'),
+  attributionController.endUsersMetrics,
+);
+router.get('/end-users', authenticate, requireOrg('admin'), attributionController.listEndUsers);
+router.post(
+  '/end-users/:id/block',
+  authenticate,
+  requireOrg('admin'),
+  attributionController.blockEndUser,
+);
+
+router.get('/audit', authenticate, requireOrg('viewer'), auditController.list);
+router.get('/audit/export.csv', authenticate, requireOrg('admin'), auditController.exportCsv);
+
+router.get('/guardrails', authenticate, requireOrg('admin'), guardrailsController.list);
+router.post('/guardrails/bind', authenticate, requireOrg('admin'), guardrailsController.bind);
+router.post('/guardrails/test', authenticate, requireOrg('admin'), guardrailsController.test);
+
+router.get('/access-groups', authenticate, requireOrg('admin'), accessGroupsController.list);
+router.post('/compliance/export', authenticate, requireOrg('owner'), complianceController.export);
+
 router.get('/models', authenticate, requireOrg('viewer'), modelsController.list);
 
 router.get('/members', authenticate, requireOrg('viewer'), membersController.list);
