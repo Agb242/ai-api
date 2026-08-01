@@ -3,6 +3,7 @@ import { PassThrough } from 'stream';
 import { apiKeyService } from '../services/api-key.service';
 import { gatewayService } from '../services/gateway.service';
 import { llmRouter } from '../services/llm/router';
+import { classifyEndpoint } from '../services/llm/endpoint-class';
 import { Organization } from '../models/Organization';
 import { walletService } from '../services/wallet.service';
 import { t } from '../i18n/messages';
@@ -65,8 +66,14 @@ export const playgroundController = {
         chatBody,
       );
 
-      // Session proxy: forward with LiteLLM master key; logs still bound to org api_key_id.
-      const result = await llmRouter.forward(payload, model);
+      if (!model) return fail(ctx, 'MISSING_FIELDS', 400);
+
+      const virtualKey = apiKeyService.resolveVirtualKeyPlaintext(key);
+      if (!virtualKey) {
+        return fail(ctx, 'KEY_PLAINTEXT_UNAVAILABLE', 400);
+      }
+
+      const result = await llmRouter.forward(payload as any, model, { bearerKey: virtualKey });
 
       if (result.stream) {
         ctx.status = result.status;
@@ -209,5 +216,109 @@ export const playgroundController = {
       wallet_balance: wallet ? Number(wallet.balance) : 0,
       currency: 'credits',
     });
+  },
+
+  /** Embeddings / images / audio via virtual key (session auth). */
+  async modality(ctx: Context) {
+    const locale = (ctx.state.locale || 'fr') as 'fr' | 'en';
+    const body = (ctx.request.body || {}) as any;
+    const apiKeyId = String(body.api_key_id || '');
+    const modality = String(body.modality || ctx.params.modality || '');
+    const started = Date.now();
+
+    const pathByModality: Record<string, string> = {
+      embeddings: '/v1/embeddings',
+      images: '/v1/images/generations',
+      'audio-speech': '/v1/audio/speech',
+    };
+    const upstreamPath = pathByModality[modality];
+    if (!apiKeyId || !upstreamPath) return fail(ctx, 'MISSING_FIELDS', 400);
+
+    const key = await apiKeyService.getById(ctx.state.orgId!, apiKeyId);
+    if (!key) return fail(ctx, 'NOT_FOUND', 404);
+    if (key.status !== 'active') {
+      return fail(ctx, key.status === 'disabled' ? 'KEY_DISABLED' : 'KEY_REVOKED', 403);
+    }
+
+    const organization = await Organization.query().findById(ctx.state.orgId!);
+    if (!organization) return fail(ctx, 'NOT_FOUND', 404);
+
+    const virtualKey = apiKeyService.resolveVirtualKeyPlaintext(key);
+    if (!virtualKey) return fail(ctx, 'KEY_PLAINTEXT_UNAVAILABLE', 400);
+
+    const classified = classifyEndpoint('POST', upstreamPath);
+    const requestBody = { ...body };
+    delete requestBody.api_key_id;
+    delete requestBody.modality;
+
+    try {
+      const { model, payload } = await gatewayService.prepareForClass(
+        { apiKey: key, organization, locale },
+        classified,
+        requestBody,
+      );
+
+      const binary = classified.binaryResponse;
+      const result = await llmRouter.proxy({
+        method: 'POST',
+        path: upstreamPath,
+        body: payload,
+        bearerKey: virtualKey,
+        binaryResponse: binary,
+      });
+
+      if (result.buffer) {
+        if (result.status >= 400) {
+          ctx.status = result.status;
+          ctx.body = result.buffer;
+          return;
+        }
+        await gatewayService.finalize({
+          organization,
+          apiKey: key,
+          model,
+          body: payload,
+          responseData: {},
+          latencyMs: Date.now() - started,
+          backend: result.backend,
+          status: 'success',
+          modelIdFallback: String(payload.model || ''),
+        });
+        ctx.status = 200;
+        ctx.set('Content-Type', result.headers['content-type'] || 'audio/mpeg');
+        ctx.body = result.buffer;
+        return;
+      }
+
+      if (result.status >= 400) {
+        ctx.status = result.status;
+        ctx.body = result.data;
+        return;
+      }
+
+      await gatewayService.finalize({
+        organization,
+        apiKey: key,
+        model,
+        body: payload,
+        responseData: result.data,
+        latencyMs: Date.now() - started,
+        backend: result.backend,
+        status: 'success',
+        modelIdFallback: String(payload.model || ''),
+      });
+
+      ok(ctx, result.data);
+    } catch (err: any) {
+      const code = err.code || 'PROVIDER_ERROR';
+      if (code === 'INSUFFICIENT_BALANCE') return fail(ctx, code, 402);
+      if (code === 'KEY_BUDGET_EXCEEDED') return fail(ctx, code, 402);
+      if (code === 'MODEL_NOT_FOUND') return fail(ctx, code, 404);
+      if (code === 'LITELLM_UNAVAILABLE' || code === 'LITELLM_NOT_CONFIGURED') {
+        return fail(ctx, code, 503);
+      }
+      logger.error('Playground modality error', { code, message: err.message, modality });
+      fail(ctx, 'PROVIDER_ERROR', 502);
+    }
   },
 };

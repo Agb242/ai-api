@@ -138,11 +138,17 @@ export const encryptionService = {
       .createHmac('sha256', secret)
       .update(payload)
       .digest('hex');
+    return this.equalStrings(signature, expectedSignature);
+  },
+
+  /** Constant-time string compare (length mismatch → false). */
+  equalStrings(a: string, b: string): boolean {
+    if (typeof a !== 'string' || typeof b !== 'string') return false;
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    if (ba.length !== bb.length) return false;
     try {
-      const a = Buffer.from(signature);
-      const b = Buffer.from(expectedSignature);
-      if (a.length !== b.length) return false;
-      return crypto.timingSafeEqual(a, b);
+      return crypto.timingSafeEqual(ba, bb);
     } catch {
       return false;
     }

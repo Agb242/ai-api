@@ -30,6 +30,8 @@ const messages: Record<Locale, Record<string, string>> = {
     KEY_DISABLED_OK: 'Clé désactivée',
     KEY_ENABLED_OK: 'Clé réactivée',
     KEY_DISABLED: 'Cette clé est désactivée.',
+    KEY_PLAINTEXT_UNAVAILABLE:
+      'Cette clé ne peut pas être utilisée dans le playground. Créez une nouvelle clé (les anciennes n’ont pas de secret stocké chiffré).',
     CONFIRM_REQUIRED: 'Confirmation requise (confirm: true).',
     FILTER_ACTIVATED: 'Règle de filtre activée',
     FILTER_DEACTIVATED: 'Règle de filtre désactivée',
@@ -72,6 +74,8 @@ const messages: Record<Locale, Record<string, string>> = {
     KEY_DISABLED_OK: 'Key disabled',
     KEY_ENABLED_OK: 'Key enabled',
     KEY_DISABLED: 'This key is disabled.',
+    KEY_PLAINTEXT_UNAVAILABLE:
+      'This key cannot be used in the playground. Create a new key (older keys have no encrypted secret stored).',
     CONFIRM_REQUIRED: 'Confirmation required (confirm: true).',
     FILTER_ACTIVATED: 'Filter rule activated',
     FILTER_DEACTIVATED: 'Filter rule deactivated',

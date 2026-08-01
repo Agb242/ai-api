@@ -4,6 +4,17 @@ import { useAuthStore } from '../stores/auth.store';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3018/api/v1';
 
+function sessionHeaders(): Record<string, string> {
+  const token = getAuthToken();
+  const orgId = useAuthStore.getState().org?.id;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  if (orgId) headers['X-Org-ID'] = orgId;
+  return headers;
+}
+
 export const playgroundApi = {
   context() {
     return apiClient.get<{ wallet_balance: number; currency: string }>('/playground/context');
@@ -24,18 +35,41 @@ export const playgroundApi = {
     },
     signal?: AbortSignal,
   ): Promise<Response> {
-    const token = getAuthToken();
-    const orgId = useAuthStore.getState().org?.id;
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
-    if (orgId) headers['X-Org-ID'] = orgId;
-
     return fetch(`${API_BASE}/playground/chat/completions`, {
       method: 'POST',
-      headers,
+      headers: sessionHeaders(),
       body: JSON.stringify({ ...body, stream: body.stream !== false }),
+      signal,
+    });
+  },
+
+  embeddings(body: { api_key_id: string; model: string; input: string | string[] }) {
+    return apiClient.post('/playground/embeddings', body);
+  },
+
+  imagesGenerations(body: {
+    api_key_id: string;
+    model: string;
+    prompt: string;
+    size?: string;
+    n?: number;
+  }) {
+    return apiClient.post('/playground/images/generations', body);
+  },
+
+  async audioSpeech(
+    body: {
+      api_key_id: string;
+      model: string;
+      input: string;
+      voice?: string;
+    },
+    signal?: AbortSignal,
+  ): Promise<Response> {
+    return fetch(`${API_BASE}/playground/audio/speech`, {
+      method: 'POST',
+      headers: sessionHeaders(),
+      body: JSON.stringify(body),
       signal,
     });
   },

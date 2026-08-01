@@ -1,10 +1,13 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '@/lib/hooks/useAuth';
 import Sidebar from './Sidebar';
 import { SiteHeader } from './SiteHeader';
 import { useTranslations } from 'next-intl';
+import { Menu } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Sheet, SheetContent, SheetTitle } from '@/components/ui/sheet';
 
 interface AppShellProps {
   children: React.ReactNode;
@@ -13,6 +16,8 @@ interface AppShellProps {
 export function AppShell({ children }: AppShellProps) {
   const { status } = useAuth();
   const t = useTranslations('layout');
+  const tNav = useTranslations('nav');
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   if (status !== 'authenticated_ready') {
     return (
@@ -30,9 +35,33 @@ export function AppShell({ children }: AppShellProps) {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
-      <Sidebar />
+      <div className="hidden md:flex">
+        <Sidebar />
+      </div>
+
+      <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
+        <SheetContent side="left" className="w-[220px] p-0 sm:max-w-[220px]" showCloseButton={false}>
+          <SheetTitle className="sr-only">{tNav('menu')}</SheetTitle>
+          <Sidebar onClose={() => setMobileOpen(false)} />
+        </SheetContent>
+      </Sheet>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <SiteHeader variant="app" />
+        <div className="flex items-center">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="ml-2 h-9 w-9 shrink-0 md:hidden"
+            onClick={() => setMobileOpen(true)}
+            aria-label={tNav('openMenu')}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          <div className="min-w-0 flex-1">
+            <SiteHeader variant="app" />
+          </div>
+        </div>
         <main className="flex-1 overflow-auto">{children}</main>
       </div>
     </div>

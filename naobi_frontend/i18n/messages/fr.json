@@ -11,6 +11,8 @@
     "playground": "Playground",
     "logout": "Déconnexion",
     "closeMenu": "Fermer le menu",
+    "openMenu": "Ouvrir le menu",
+    "menu": "Menu",
     "userFallback": "Utilisateur"
   },
   "layout": {
@@ -288,7 +290,26 @@
     "advanced": "Paramètres avancés",
     "temperature": "Température",
     "maxTokens": "Max tokens",
-    "streamToggle": "Stream"
+    "streamToggle": "Stream",
+    "tabChat": "Chat",
+    "tabEmbeddings": "Embeddings",
+    "tabImage": "Image",
+    "tabAudio": "Audio",
+    "embedInput": "Texte à vectoriser",
+    "embedPlaceholder": "Saisissez un texte…",
+    "runEmbeddings": "Générer l’embedding",
+    "embedOk": "Embedding OK — {dims} dimensions",
+    "missingEmbed": "Modèle et texte requis",
+    "imagePrompt": "Prompt image",
+    "imagePlaceholder": "Décrivez l’image…",
+    "runImage": "Générer l’image",
+    "missingImage": "Modèle et prompt requis",
+    "imageNoPreview": "Réponse reçue sans URL/preview",
+    "audioInput": "Texte à synthétiser",
+    "audioPlaceholder": "Texte pour TTS…",
+    "runAudio": "Générer l’audio",
+    "missingAudio": "Modèle et texte requis",
+    "running": "En cours…"
   },
   "onboarding": {
     "title": "Créer votre organisation",

@@ -149,19 +149,27 @@ export const billingController = {
       ctx.get('X-Signature') ||
       ctx.get('X-Webhook-Signature') ||
       '';
-    const rawBody = JSON.stringify(ctx.request.body || {});
+
+    // Prefer raw body when middleware captured it; else stable JSON stringify.
+    const reqAny = ctx.request as any;
+    const rawBody: string =
+      (typeof reqAny.rawBody === 'string' && reqAny.rawBody) ||
+      (typeof reqAny.body?.[Symbol.for('unparsedBody')] === 'string' &&
+        reqAny.body[Symbol.for('unparsedBody')]) ||
+      JSON.stringify(ctx.request.body || {});
+
     const valid = encryptionService.verifyWebhookSignature(rawBody, signature, secret);
-    // Also accept Authorization Bearer matching secret (SebPay variants)
+
     const auth = ctx.get('Authorization') || '';
-    const bearerOk = auth === `Bearer ${secret}` || auth === secret;
-    if (!valid && !bearerOk) {
-      // timing-safe compare of raw secret header
-      const headerSecret = ctx.get('X-Secret-Key') || '';
-      if (headerSecret !== secret) {
-        ctx.status = 401;
-        ctx.body = { error: { message: 'Invalid webhook signature', code: 'UNAUTHORIZED' } };
-        return;
-      }
+    const bearerToken = auth.startsWith('Bearer ') ? auth.slice(7) : auth;
+    const bearerOk = encryptionService.equalStrings(bearerToken, secret);
+    const headerSecret = ctx.get('X-Secret-Key') || '';
+    const headerOk = encryptionService.equalStrings(headerSecret, secret);
+
+    if (!valid && !bearerOk && !headerOk) {
+      ctx.status = 401;
+      ctx.body = { error: { message: 'Invalid webhook signature', code: 'UNAUTHORIZED' } };
+      return;
     }
 
     try {

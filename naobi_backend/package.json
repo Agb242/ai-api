@@ -15,6 +15,7 @@
     "seed:make": "knex seed:make",
     "seed:run": "knex seed:run",
     "test": "jest --coverage",
+    "test:smoke": "jest tests/smoke.test.ts --coverage=false --forceExit",
     "test:watch": "jest --watch",
     "lint": "eslint . --ext .ts",
     "lint:fix": "eslint . --ext .ts --fix",

@@ -4,8 +4,13 @@ import { ApiKey } from '../models/ApiKey';
 import { Organization } from '../models/Organization';
 import { apiKeyService } from './api-key.service';
 import { walletService } from './wallet.service';
-import { filterService } from './filter.service';
+import { filterService, FilterResult } from './filter.service';
 import { llmRouter, ChatCompletionRequest, extractUsage } from './llm/router';
+import {
+  EndpointClass,
+  ClassifiedEndpoint,
+  estimateTokensForClass,
+} from './llm/endpoint-class';
 import logger from '../config/logger';
 
 export function estimateCost(
@@ -20,11 +25,7 @@ export function estimateCost(
 
 /** Rough pre-check estimate from message sizes (chars/4 ≈ tokens). */
 export function estimateInputTokens(body: ChatCompletionRequest): number {
-  const messages = (body.messages || []) as Array<{ content?: unknown }>;
-  const text = messages
-    .map((m) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content || '')))
-    .join('');
-  return Math.max(32, Math.ceil(text.length / 4));
+  return estimateTokensForClass('chat', body as Record<string, unknown>);
 }
 
 export async function resolveModel(
@@ -65,60 +66,100 @@ export interface GatewayContext {
   locale: 'fr' | 'en';
 }
 
+function modelIdFromBody(body: Record<string, unknown> | null | undefined): string | null {
+  if (!body) return null;
+  if (typeof body.model === 'string' && body.model) return body.model;
+  return null;
+}
+
 export const gatewayService = {
   async prepare(ctx: GatewayContext, body: ChatCompletionRequest) {
+    return this.prepareForClass(ctx, {
+      class: 'chat',
+      upstreamPath: '/v1/chat/completions',
+      applyFilters: true,
+      binaryResponse: false,
+      multipart: false,
+    }, body as Record<string, unknown>);
+  },
+
+  async prepareForClass(
+    ctx: GatewayContext,
+    classified: ClassifiedEndpoint,
+    body: Record<string, unknown> | null | undefined,
+  ) {
     const { apiKey, organization } = ctx;
 
     if (apiKeyService.isBudgetExceeded(apiKey)) {
       throw Object.assign(new Error('KEY_BUDGET_EXCEEDED'), { code: 'KEY_BUDGET_EXCEEDED' });
     }
 
-    const model = await resolveModel(String(body.model), organization);
-    const estimatedTokens = estimateInputTokens(body);
-    const estimatedCost = estimateCost(model, estimatedTokens, estimatedTokens); // conservative
+    const modelId = modelIdFromBody(body);
+    let model: LlmModel | null = null;
+    if (modelId) {
+      model = await resolveModel(modelId, organization);
+    }
+
+    const estimatedTokens = estimateTokensForClass(
+      classified.class,
+      body || undefined,
+    );
+    const estimatedCost = model
+      ? estimateCost(model, estimatedTokens, Math.ceil(estimatedTokens / 2))
+      : estimatedTokens * 0.00001;
 
     await walletService.assertAffordable(organization.id, estimatedCost);
 
-    const { result: filterResult, payload } = await filterService.evaluate(
-      organization.id,
-      body,
-    );
+    let filterResult: FilterResult = { action: 'pass', content: '' };
+    let payload: Record<string, unknown> = { ...(body || {}) };
 
-    if (filterResult.action === 'block' && filterResult.rule) {
-      const log = await RequestLog.query().insert({
-        organization_id: organization.id,
-        api_key_id: apiKey.id,
-        model_uuid: model.id,
-        model_id: model.model_id,
-        tokens_input: 0,
-        tokens_output: 0,
-        cost: 0,
-        status: 'blocked',
-        triggered_rule_id: filterResult.rule.id,
-        filter_action: 'block',
-        streamed: !!body.stream,
-      });
-      await filterService.audit({
-        organizationId: organization.id,
-        ruleId: filterResult.rule.id,
-        action: 'block',
-        requestLogId: log.id,
-      });
-      throw Object.assign(new Error('REQUEST_BLOCKED'), {
-        code: 'REQUEST_BLOCKED',
-        ruleName: filterResult.rule.name,
-        logId: log.id,
-      });
+    if (classified.applyFilters && body) {
+      const evaluated = await filterService.evaluate(organization.id, body);
+      filterResult = evaluated.result;
+      payload = evaluated.payload as Record<string, unknown>;
+
+      if (filterResult.action === 'block' && filterResult.rule) {
+        const rule = filterResult.rule;
+        const log = await RequestLog.query().insert({
+          organization_id: organization.id,
+          api_key_id: apiKey.id,
+          model_uuid: model?.id || null,
+          model_id: model?.model_id || modelId || null,
+          tokens_input: 0,
+          tokens_output: 0,
+          cost: 0,
+          status: 'blocked',
+          triggered_rule_id: rule.id,
+          filter_action: 'block',
+          streamed: !!(body as any).stream,
+        });
+        await filterService.audit({
+          organizationId: organization.id,
+          ruleId: rule.id,
+          action: 'block',
+          requestLogId: log.id,
+        });
+        throw Object.assign(new Error('REQUEST_BLOCKED'), {
+          code: 'REQUEST_BLOCKED',
+          ruleName: rule.name,
+          logId: log.id,
+        });
+      }
     }
 
-    return { model, payload: payload as ChatCompletionRequest, filterResult };
+    return {
+      model,
+      payload,
+      filterResult,
+      endpointClass: classified.class as EndpointClass,
+    };
   },
 
   async finalize(params: {
     organization: Organization;
     apiKey: ApiKey;
-    model: LlmModel;
-    body: ChatCompletionRequest;
+    model: LlmModel | null;
+    body: Record<string, unknown>;
     responseData: unknown;
     latencyMs: number;
     backend: string;
@@ -126,14 +167,17 @@ export const gatewayService = {
     ruleId?: string;
     status?: string;
     errorCode?: string;
+    modelIdFallback?: string;
   }) {
     const usage = extractUsage(params.responseData);
-    const cost = estimateCost(params.model, usage.input, usage.output);
+    const cost = params.model
+      ? estimateCost(params.model, usage.input, usage.output)
+      : 0;
 
     if (cost > 0 && params.status !== 'error' && params.status !== 'blocked') {
       try {
         await walletService.debit(params.organization.id, cost, {
-          model: params.model.model_id,
+          model: params.model?.model_id || params.modelIdFallback || 'unknown',
         });
         await apiKeyService.addBudgetConsumed(params.apiKey.id, cost);
       } catch (err) {
@@ -144,8 +188,8 @@ export const gatewayService = {
     const log = await RequestLog.query().insert({
       organization_id: params.organization.id,
       api_key_id: params.apiKey.id,
-      model_uuid: params.model.id,
-      model_id: params.model.model_id,
+      model_uuid: params.model?.id || null,
+      model_id: params.model?.model_id || params.modelIdFallback || null,
       tokens_input: usage.input,
       tokens_output: usage.output,
       latency_ms: params.latencyMs,

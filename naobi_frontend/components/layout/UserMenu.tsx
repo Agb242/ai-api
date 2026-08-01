@@ -90,7 +90,7 @@ export function UserMenu() {
           </Link>
         </DropdownMenuItem>
         <DropdownMenuItem asChild>
-          <Link href="/members" className="cursor-pointer">
+          <Link href="/organizations" className="cursor-pointer">
             <Settings className="size-4" />
             {t('settings')}
           </Link>

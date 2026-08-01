@@ -4,6 +4,8 @@ import { ApiKey, ApiKeyStatus } from '../models/ApiKey';
 import { RequestLog } from '../models/RequestLog';
 import { knex } from '../config/database';
 import { litellmAdmin, hashApiKey } from './litellm-admin.service';
+import { encryptionService } from './encryption.service';
+import logger from '../config/logger';
 
 function publicKeyFields(k: ApiKey) {
   return {
@@ -84,9 +86,21 @@ export const apiKeyService = {
       litellm_key_id: generated.token_id || generated.key_name || null,
       litellm_user_id: litellmUserId,
       litellm_spend: 0,
+      litellm_key_encrypted: encryptionService.encryptApiKey(raw),
     } as any);
 
     return { record, plaintext: raw };
+  },
+
+  /** Decrypt virtual key for playground proxy — never expose via HTTP responses. */
+  resolveVirtualKeyPlaintext(key: ApiKey): string | null {
+    if (!key.litellm_key_encrypted) return null;
+    try {
+      return encryptionService.decryptApiKey(key.litellm_key_encrypted);
+    } catch (err) {
+      logger.warn('Failed to decrypt api key ciphertext', { id: key.id, err });
+      return null;
+    }
   },
 
   async list(organizationId: string) {
@@ -125,6 +139,16 @@ export const apiKeyService = {
     if (!key) return null;
     if (key.status === 'revoked' || key.status === 'expired') return key;
     if (key.status === 'disabled') return key;
+
+    const raw = this.resolveVirtualKeyPlaintext(key);
+    if (raw) {
+      try {
+        await litellmAdmin.blockKey(raw);
+      } catch (err) {
+        logger.warn('LiteLLM blockKey failed — local disable proceeds', { id: key.id, err });
+      }
+    }
+
     return key.$query().patchAndFetch({ status: 'disabled' as ApiKeyStatus });
   },
 
@@ -133,6 +157,16 @@ export const apiKeyService = {
     if (!key) return null;
     if (key.status === 'revoked' || key.status === 'expired') return key;
     if (key.status !== 'disabled') return key;
+
+    const raw = this.resolveVirtualKeyPlaintext(key);
+    if (raw) {
+      try {
+        await litellmAdmin.unblockKey(raw);
+      } catch (err) {
+        logger.warn('LiteLLM unblockKey failed — local enable proceeds', { id: key.id, err });
+      }
+    }
+
     return key.$query().patchAndFetch({ status: 'active' as ApiKeyStatus });
   },
 

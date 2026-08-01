@@ -1,14 +1,4 @@
-export interface JwtPayload {
-  userId: string;
-  email: string;
-  iat?: number;
-  exp?: number;
-}
-
-export interface TokenPair {
-  accessToken: string;
-  refreshToken: string;
-}
+/** Auth-related request/response shapes (session/OTP — no JWT). */
 
 export interface RegisterInput {
   email: string;
@@ -26,10 +16,6 @@ export interface VerifyOtpInput {
   otp_code: string;
 }
 
-export interface RefreshTokenInput {
-  refresh_token: string;
-}
-
 export interface AuthResponse {
   user: {
     id: string;
@@ -38,6 +24,5 @@ export interface AuthResponse {
     last_name: string | null;
     verified_at: string | null;
   };
-  tokens?: TokenPair;
   message: string;
 }

@@ -491,6 +491,42 @@ export const litellmAdmin = {
     });
     return resp.ok;
   },
+
+  async blockKey(rawKey: string) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/key/block`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ key: rawKey }),
+    });
+    if (!resp.ok) {
+      const alt = await fetch(`${config.litellm.baseUrl}/key/block`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ keys: [rawKey] }),
+      });
+      return alt.ok;
+    }
+    return true;
+  },
+
+  async unblockKey(rawKey: string) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/key/unblock`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ key: rawKey }),
+    });
+    if (!resp.ok) {
+      const alt = await fetch(`${config.litellm.baseUrl}/key/unblock`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({ keys: [rawKey] }),
+      });
+      return alt.ok;
+    }
+    return true;
+  },
 };
 
 export function hashApiKey(raw: string): string {

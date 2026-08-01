@@ -22,6 +22,8 @@ export class ApiKey extends BaseModel {
   litellm_user_id?: string | null;
   litellm_spend?: string | number;
   litellm_synced_at?: string | Date | null;
+  /** AES-GCM ciphertext of virtual key — playground only; never returned in API */  
+  litellm_key_encrypted?: string | null;
 
   static relationMappings: RelationMappingsThunk = () => ({
     organization: {

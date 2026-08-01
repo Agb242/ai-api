@@ -6,6 +6,7 @@ import { Link } from '@/i18n/routing';
 import { ArrowRight, Menu, X } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { UserMenu } from '@/components/layout/UserMenu';
+import { NoabiLogo } from '@/components/layout/NoabiLogo';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -55,10 +56,10 @@ export function SiteHeader({ variant = 'marketing', className }: SiteHeaderProps
           variant === 'auth' && 'mx-auto max-w-6xl px-0',
         )}
       >
-        <Link href={homeHref} className="flex shrink-0 items-center gap-2.5">
-        
+        <Link href={homeHref} className="flex shrink-0 items-center gap-2.5 text-foreground">
+          <NoabiLogo size={22} className="text-primary" />
           <span className="font-display text-[17px] font-semibold tracking-tight md:text-[18px]">
-           
+            noabi
           </span>
         </Link>
 

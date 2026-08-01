@@ -20,6 +20,7 @@ import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuthStore } from '@/lib/stores/auth.store';
@@ -27,6 +28,7 @@ import { ChevronDown } from 'lucide-react';
 import 'highlight.js/styles/github-dark.css';
 
 type Msg = { role: 'user' | 'assistant' | 'system'; content: string };
+type Modality = 'chat' | 'embeddings' | 'image' | 'audio';
 
 export default function PlaygroundPage() {
   const t = useTranslations('playground');
@@ -35,6 +37,7 @@ export default function PlaygroundPage() {
   const qc = useQueryClient();
   const gateway = getGatewayBase();
 
+  const [modality, setModality] = useState<Modality>('chat');
   const [mode, setMode] = useState<'playground' | 'curl'>('playground');
   const [apiKeyId, setApiKeyId] = useState('');
   const [model, setModel] = useState('');
@@ -47,6 +50,13 @@ export default function PlaygroundPage() {
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [reveal, setReveal] = useState<ApiKeyCreated | null>(null);
+  const [embedInput, setEmbedInput] = useState('Hello from noabi');
+  const [embedResult, setEmbedResult] = useState('');
+  const [imagePrompt, setImagePrompt] = useState('A red bicycle on a sunny street');
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [audioText, setAudioText] = useState('Bonjour, bienvenue sur noabi.');
+  const [audioUrl, setAudioUrl] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   const { data: keys = [] } = useQuery({
@@ -122,7 +132,38 @@ export default function PlaygroundPage() {
     : user?.email?.slice(0, 2).toUpperCase() || 'U';
 
   const selectedKey = keys.find((k) => k.id === apiKeyId);
-  const curlSnippet = `curl ${gateway}/v1/chat/completions \\
+
+  const curlSnippet = useMemo(() => {
+    if (modality === 'embeddings') {
+      return `curl ${gateway}/v1/embeddings \\
+  -H "Authorization: Bearer $NOABI_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({
+    model: model || 'text-embedding-3-small',
+    input: embedInput.trim() || 'Hello',
+  })}'`;
+    }
+    if (modality === 'image') {
+      return `curl ${gateway}/v1/images/generations \\
+  -H "Authorization: Bearer $NOABI_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({
+    model: model || 'dall-e-3',
+    prompt: imagePrompt.trim() || 'A cat',
+  })}'`;
+    }
+    if (modality === 'audio') {
+      return `curl ${gateway}/v1/audio/speech \\
+  -H "Authorization: Bearer $NOABI_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '${JSON.stringify({
+    model: model || 'tts-1',
+    input: audioText.trim() || 'Hello',
+    voice: 'alloy',
+  })}' \\
+  --output speech.mp3`;
+    }
+    return `curl ${gateway}/v1/chat/completions \\
   -H "Authorization: Bearer $NOABI_API_KEY" \\
   -H "Content-Type: application/json" \\
   -d '${JSON.stringify({
@@ -132,6 +173,17 @@ export default function PlaygroundPage() {
     temperature,
     max_tokens: maxTokens,
   })}'`;
+  }, [
+    modality,
+    gateway,
+    model,
+    embedInput,
+    imagePrompt,
+    audioText,
+    input,
+    temperature,
+    maxTokens,
+  ]);
 
   async function sendChat() {
     if (!apiKeyId || selectedKey?.status !== 'active') {
@@ -223,6 +275,107 @@ export default function PlaygroundPage() {
     abortRef.current?.abort();
   }
 
+  async function runEmbeddings() {
+    if (!apiKeyId || selectedKey?.status !== 'active') {
+      toast.error(t('missingKeyCreate'));
+      return;
+    }
+    if (!model || !embedInput.trim()) {
+      toast.error(t('missingEmbed'));
+      return;
+    }
+    setBusy(true);
+    setEmbedResult('');
+    try {
+      const res = await playgroundApi.embeddings({
+        api_key_id: apiKeyId,
+        model,
+        input: embedInput.trim(),
+      });
+      if (!res.success) throw new Error(res.error?.message || t('error'));
+      const data = res.data as any;
+      const dims = data?.data?.[0]?.embedding?.length;
+      setEmbedResult(
+        dims
+          ? t('embedOk', { dims })
+          : JSON.stringify(data, null, 2).slice(0, 2000),
+      );
+    } catch (e: any) {
+      toast.error(e.message || t('error'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runImage() {
+    if (!apiKeyId || selectedKey?.status !== 'active') {
+      toast.error(t('missingKeyCreate'));
+      return;
+    }
+    if (!model || !imagePrompt.trim()) {
+      toast.error(t('missingImage'));
+      return;
+    }
+    setBusy(true);
+    setImageUrl(null);
+    try {
+      const res = await playgroundApi.imagesGenerations({
+        api_key_id: apiKeyId,
+        model,
+        prompt: imagePrompt.trim(),
+      });
+      if (!res.success) throw new Error(res.error?.message || t('error'));
+      const data = res.data as any;
+      const url =
+        data?.data?.[0]?.url ||
+        (data?.data?.[0]?.b64_json
+          ? `data:image/png;base64,${data.data[0].b64_json}`
+          : null);
+      if (!url) {
+        setEmbedResult(JSON.stringify(data, null, 2).slice(0, 2000));
+        toast.message(t('imageNoPreview'));
+      } else {
+        setImageUrl(url);
+      }
+    } catch (e: any) {
+      toast.error(e.message || t('error'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runAudio() {
+    if (!apiKeyId || selectedKey?.status !== 'active') {
+      toast.error(t('missingKeyCreate'));
+      return;
+    }
+    if (!model || !audioText.trim()) {
+      toast.error(t('missingAudio'));
+      return;
+    }
+    setBusy(true);
+    if (audioUrl) URL.revokeObjectURL(audioUrl);
+    setAudioUrl(null);
+    try {
+      const res = await playgroundApi.audioSpeech({
+        api_key_id: apiKeyId,
+        model,
+        input: audioText.trim(),
+        voice: 'alloy',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err?.error?.message || `HTTP ${res.status}`);
+      }
+      const blob = await res.blob();
+      setAudioUrl(URL.createObjectURL(blob));
+    } catch (e: any) {
+      toast.error(e.message || t('error'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function copyCurl() {
     try {
       await navigator.clipboard.writeText(curlSnippet);
@@ -231,6 +384,13 @@ export default function PlaygroundPage() {
       toast.error(t('copyFailed'));
     }
   }
+
+  const modalityTabs: { id: Modality; label: string }[] = [
+    { id: 'chat', label: t('tabChat') },
+    { id: 'embeddings', label: t('tabEmbeddings') },
+    { id: 'image', label: t('tabImage') },
+    { id: 'audio', label: t('tabAudio') },
+  ];
 
   return (
     <div className="flex h-[calc(100vh-3.5rem-64px)] flex-col gap-4 p-6 md:p-7">
@@ -265,6 +425,23 @@ export default function PlaygroundPage() {
         </div>
       </div>
 
+      <div className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
+        {modalityTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            onClick={() => setModality(tab.id)}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+              modality === tab.id
+                ? 'bg-accent-soft text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
       {error ? (
         <p className="border border-border p-3 text-sm text-muted-foreground">
           {(error as Error).message}
@@ -284,45 +461,58 @@ export default function PlaygroundPage() {
         <ModelInfoPanel model={selectedModel} walletBalance={ctx?.wallet_balance} />
       </div>
 
-      <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-        <CollapsibleTrigger asChild>
-          <Button type="button" variant="ghost" size="sm" className="gap-1 px-0">
-            {t('advanced')}
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition ${advancedOpen ? 'rotate-180' : ''}`}
-            />
-          </Button>
-        </CollapsibleTrigger>
-        <CollapsibleContent className="mt-2 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label>{t('temperature')}</Label>
-            <Input
-              type="number"
-              min={0}
-              max={2}
-              step={0.1}
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>{t('maxTokens')}</Label>
-            <Input
-              type="number"
-              min={1}
-              max={128000}
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(Number(e.target.value))}
-            />
-          </div>
-          <div className="flex items-center gap-2 pt-6">
-            <Switch checked={streamEnabled} onCheckedChange={setStreamEnabled} id="stream" />
-            <Label htmlFor="stream">{t('streamToggle')}</Label>
-          </div>
-        </CollapsibleContent>
-      </Collapsible>
+      {modality === 'chat' ? (
+        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm" className="gap-1 px-0">
+              {t('advanced')}
+              <ChevronDown
+                className={`h-3.5 w-3.5 transition ${advancedOpen ? 'rotate-180' : ''}`}
+              />
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="mt-2 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
+            <div className="space-y-1.5">
+              <Label>{t('temperature')}</Label>
+              <Input
+                type="number"
+                min={0}
+                max={2}
+                step={0.1}
+                value={temperature}
+                onChange={(e) => setTemperature(Number(e.target.value))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>{t('maxTokens')}</Label>
+              <Input
+                type="number"
+                min={1}
+                max={128000}
+                value={maxTokens}
+                onChange={(e) => setMaxTokens(Number(e.target.value))}
+              />
+            </div>
+            <div className="flex items-center gap-2 pt-6">
+              <Switch checked={streamEnabled} onCheckedChange={setStreamEnabled} id="stream" />
+              <Label htmlFor="stream">{t('streamToggle')}</Label>
+            </div>
+          </CollapsibleContent>
+        </Collapsible>
+      ) : null}
 
-      {mode === 'playground' ? (
+      {mode === 'curl' ? (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground">
+            {t('gateway')}: <code className="font-mono">{gateway}</code>
+          </p>
+          <p className="text-xs text-muted-foreground">{t('curlKeyHint')}</p>
+          <pre className="overflow-x-auto rounded-xl border border-border bg-card p-4 font-mono text-[11px] whitespace-pre-wrap">
+            {curlSnippet}
+          </pre>
+          <Button onClick={() => void copyCurl()}>{t('copyCurl')}</Button>
+        </div>
+      ) : modality === 'chat' ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
             {messages.length === 0 ? (
@@ -348,16 +538,58 @@ export default function PlaygroundPage() {
             disabled={!apiKeyId || selectedKey?.status !== 'active'}
           />
         </div>
+      ) : modality === 'embeddings' ? (
+        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <Label>{t('embedInput')}</Label>
+          <Textarea
+            value={embedInput}
+            onChange={(e) => setEmbedInput(e.target.value)}
+            rows={4}
+            placeholder={t('embedPlaceholder')}
+          />
+          <Button disabled={busy} onClick={() => void runEmbeddings()}>
+            {busy ? t('running') : t('runEmbeddings')}
+          </Button>
+          {embedResult ? (
+            <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
+              {embedResult}
+            </pre>
+          ) : null}
+        </div>
+      ) : modality === 'image' ? (
+        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <Label>{t('imagePrompt')}</Label>
+          <Textarea
+            value={imagePrompt}
+            onChange={(e) => setImagePrompt(e.target.value)}
+            rows={3}
+            placeholder={t('imagePlaceholder')}
+          />
+          <Button disabled={busy} onClick={() => void runImage()}>
+            {busy ? t('running') : t('runImage')}
+          </Button>
+          {imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={imageUrl}
+              alt={imagePrompt}
+              className="max-h-80 rounded-lg border border-border object-contain"
+            />
+          ) : null}
+        </div>
       ) : (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t('gateway')}: <code className="font-mono">{gateway}</code>
-          </p>
-          <p className="text-xs text-muted-foreground">{t('curlKeyHint')}</p>
-          <pre className="overflow-x-auto rounded-xl border border-border bg-card p-4 font-mono text-[11px] whitespace-pre-wrap">
-            {curlSnippet}
-          </pre>
-          <Button onClick={() => void copyCurl()}>{t('copyCurl')}</Button>
+        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
+          <Label>{t('audioInput')}</Label>
+          <Textarea
+            value={audioText}
+            onChange={(e) => setAudioText(e.target.value)}
+            rows={3}
+            placeholder={t('audioPlaceholder')}
+          />
+          <Button disabled={busy} onClick={() => void runAudio()}>
+            {busy ? t('running') : t('runAudio')}
+          </Button>
+          {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : null}
         </div>
       )}
 
