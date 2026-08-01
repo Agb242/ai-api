@@ -139,5 +139,6 @@ export const CORS_ALLOW_HEADERS = [
   'x-org-id',
   'X-API-Key',
   'x-api-key',
+  'X-User-Id',
+  'X-End-User-Id',
 ];
-

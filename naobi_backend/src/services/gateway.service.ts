@@ -11,6 +11,7 @@ import {
   ClassifiedEndpoint,
   estimateTokensForClass,
 } from './llm/endpoint-class';
+import { budgetService } from './budget.service';
 import logger from '../config/logger';
 
 export function estimateCost(
@@ -94,6 +95,10 @@ export const gatewayService = {
       throw Object.assign(new Error('KEY_BUDGET_EXCEEDED'), { code: 'KEY_BUDGET_EXCEEDED' });
     }
 
+    if (await budgetService.isOrgBudgetBlocked(organization.id)) {
+      throw Object.assign(new Error('ORG_BUDGET_EXCEEDED'), { code: 'ORG_BUDGET_EXCEEDED' });
+    }
+
     const modelId = modelIdFromBody(body);
     let model: LlmModel | null = null;
     if (modelId) {
@@ -168,6 +173,7 @@ export const gatewayService = {
     status?: string;
     errorCode?: string;
     modelIdFallback?: string;
+    endUserId?: string | null;
   }) {
     const usage = extractUsage(params.responseData);
     const cost = params.model
@@ -185,6 +191,9 @@ export const gatewayService = {
       }
     }
 
+    const metadata: Record<string, unknown> = {};
+    if (params.endUserId) metadata.end_user_id = params.endUserId;
+
     const log = await RequestLog.query().insert({
       organization_id: params.organization.id,
       api_key_id: params.apiKey.id,
@@ -200,7 +209,7 @@ export const gatewayService = {
       filter_action: params.filterAction || null,
       router_backend: params.backend,
       streamed: !!params.body.stream,
-      metadata: {},
+      metadata,
     });
 
     return { log, cost, usage };

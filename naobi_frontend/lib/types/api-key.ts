@@ -10,6 +10,9 @@ export type ApiKey = {
   scope: string;
   budget_max?: number | string | null;
   budget_consumed?: number | string;
+  rpm_limit?: number | null;
+  tpm_limit?: number | null;
+  models_allowlist?: string[] | null;
   expires_at?: string | null;
   status: ApiKeyStatus;
   last_used_at?: string | null;

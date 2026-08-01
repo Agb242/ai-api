@@ -95,6 +95,10 @@ async function handleGatewayErrors(
     errorBody(ctx, 'KEY_BUDGET_EXCEEDED', 402);
     return;
   }
+  if (code === 'ORG_BUDGET_EXCEEDED') {
+    errorBody(ctx, 'ORG_BUDGET_EXCEEDED', 402);
+    return;
+  }
   if (code === 'MODEL_NOT_FOUND') {
     errorBody(ctx, 'MODEL_NOT_FOUND', 404);
     return;
@@ -149,6 +153,11 @@ export const gatewayController = {
 
     const body = (ctx.request.body || {}) as Record<string, unknown>;
     const multipart = multipartFromCtx(ctx);
+    const endUserId =
+      ctx.get('X-User-Id') ||
+      ctx.get('X-End-User-Id') ||
+      (typeof body.user === 'string' ? body.user : '') ||
+      '';
 
     const needsModel = ['chat', 'completions', 'embeddings', 'images'].includes(
       classified.class,
@@ -179,14 +188,21 @@ export const gatewayController = {
       );
 
       const wantsStream = !!(payload as any).stream && !classified.binaryResponse;
+      const extraHeaders: Record<string, string> = {};
+      if (endUserId) {
+        extraHeaders['X-User-Id'] = endUserId;
+        // LiteLLM OpenAI-compatible end-user field often mirrored via header
+        extraHeaders['x-litellm-end-user'] = endUserId;
+      }
       const result = await llmRouter.proxy({
         method: ctx.method,
         path: classified.upstreamPath,
-        body: multipart ? undefined : payload,
+        body: multipart ? undefined : { ...payload, ...(endUserId && !payload.user ? { user: endUserId } : {}) },
         multipart: multipart || undefined,
         bearerKey: ctx.state.rawApiKey || undefined,
         stream: wantsStream,
         binaryResponse: classified.binaryResponse,
+        extraHeaders,
       });
 
       if (result.stream) {
@@ -230,6 +246,7 @@ export const gatewayController = {
             ruleId: (filterResult as any).rule?.id,
             status: result.status >= 400 ? 'error' : 'success',
             modelIdFallback: String(payload.model || ''),
+            endUserId: endUserId || null,
           });
           realtimeHub.emitRequest(organization.id, {
             id: log.id,
@@ -281,6 +298,7 @@ export const gatewayController = {
           backend: result.backend,
           status: 'success',
           modelIdFallback: String(payload.model || multipart?.fields?.model || ''),
+          endUserId: endUserId || null,
         });
         realtimeHub.emitRequest(organization.id, {
           id: log.id,
@@ -326,6 +344,7 @@ export const gatewayController = {
         ruleId: (filterResult as any).rule?.id,
         status: filterResult.action === 'redact' ? 'redacted' : 'success',
         modelIdFallback: String(payload.model || ''),
+        endUserId: endUserId || null,
       });
 
       realtimeHub.emitRequest(organization.id, {

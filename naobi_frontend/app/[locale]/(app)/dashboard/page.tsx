@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { io, Socket } from 'socket.io-client';
 import { metricsApi } from '@/lib/api/gateway.api';
 import { keysApi } from '@/lib/api/keys.api';
+import { analyticsApi } from '@/lib/api/budgets.api';
 import type { ApiKey, ApiKeyCreated } from '@/lib/types/api-key';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
@@ -75,6 +76,26 @@ export default function DashboardPage() {
       const res = await keysApi.list();
       if (!res.success) throw new Error(res.error?.message);
       return (res.data as ApiKey[]) || [];
+    },
+    enabled: !!org?.id,
+  });
+
+  const { data: spendTags } = useQuery({
+    queryKey: ['spend-tags', org?.id],
+    queryFn: async () => {
+      const res = await analyticsApi.spendTags();
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data!;
+    },
+    enabled: !!org?.id,
+  });
+
+  const { data: endUsers } = useQuery({
+    queryKey: ['end-users', org?.id],
+    queryFn: async () => {
+      const res = await analyticsApi.endUsers(30);
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data!;
     },
     enabled: !!org?.id,
   });
@@ -206,6 +227,43 @@ export default function DashboardPage() {
             </div>
           </div>
         ))}
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-border bg-card p-4 md:p-5">
+          <p className="font-display text-sm font-semibold">{t('spendTags')}</p>
+          <p className="mb-3 text-xs text-muted-foreground">{t('spendTagsSub')}</p>
+          {spendTags?.empty || !spendTags?.tags?.length ? (
+            <p className="text-sm text-muted-foreground">{t('spendTagsEmpty')}</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {spendTags.tags.slice(0, 8).map((row: any, i: number) => (
+                <li key={i} className="flex justify-between gap-2 font-mono text-xs">
+                  <span className="truncate">{row.tag || row.name || JSON.stringify(row).slice(0, 40)}</span>
+                  <span>{Number(row.spend ?? row.cost ?? 0).toFixed(4)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4 md:p-5">
+          <p className="font-display text-sm font-semibold">{t('endUsers')}</p>
+          <p className="mb-3 text-xs text-muted-foreground">{t('endUsersSub')}</p>
+          {!endUsers?.items?.length ? (
+            <p className="text-sm text-muted-foreground">{t('endUsersEmpty')}</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {endUsers.items.slice(0, 8).map((row) => (
+                <li key={row.end_user_id} className="flex justify-between gap-2 font-mono text-xs">
+                  <span className="truncate">{row.end_user_id}</span>
+                  <span>
+                    {row.requests} · {row.cost.toFixed(4)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       <div className="rounded-xl border border-border bg-card p-4 md:p-5">

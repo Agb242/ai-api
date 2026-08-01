@@ -32,6 +32,11 @@ const messages: Record<Locale, Record<string, string>> = {
     KEY_DISABLED: 'Cette clé est désactivée.',
     KEY_PLAINTEXT_UNAVAILABLE:
       'Cette clé ne peut pas être utilisée dans le playground. Créez une nouvelle clé (les anciennes n’ont pas de secret stocké chiffré).',
+    KEY_ROTATED: 'Clé régénérée. Copiez-la maintenant — elle ne sera plus affichée.',
+    KEY_SPEND_RESET: 'Compteur de dépense de la clé réinitialisé.',
+    ORG_BUDGET_EXCEEDED:
+      'Plafond budgétaire de l’organisation atteint pour cette période.',
+    BUDGET_SAVED: 'Plafond budgétaire enregistré.',
     CONFIRM_REQUIRED: 'Confirmation requise (confirm: true).',
     FILTER_ACTIVATED: 'Règle de filtre activée',
     FILTER_DEACTIVATED: 'Règle de filtre désactivée',
@@ -76,6 +81,10 @@ const messages: Record<Locale, Record<string, string>> = {
     KEY_DISABLED: 'This key is disabled.',
     KEY_PLAINTEXT_UNAVAILABLE:
       'This key cannot be used in the playground. Create a new key (older keys have no encrypted secret stored).',
+    KEY_ROTATED: 'Key rotated. Copy it now — it will not be shown again.',
+    KEY_SPEND_RESET: 'Key spend counter reset.',
+    ORG_BUDGET_EXCEEDED: 'Organization budget ceiling reached for this period.',
+    BUDGET_SAVED: 'Budget ceiling saved.',
     CONFIRM_REQUIRED: 'Confirmation required (confirm: true).',
     FILTER_ACTIVATED: 'Filter rule activated',
     FILTER_DEACTIVATED: 'Filter rule deactivated',

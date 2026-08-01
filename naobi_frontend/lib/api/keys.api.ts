@@ -22,8 +22,24 @@ export const keysApi = {
   create(payload: CreateApiKeyPayload) {
     return apiClient.post<ApiKeyCreated>('/keys', payload);
   },
-  update(id: string, payload: { name?: string; description?: string | null }) {
+  update(
+    id: string,
+    payload: {
+      name?: string;
+      description?: string | null;
+      budget_max?: number | null;
+      rpm_limit?: number | null;
+      tpm_limit?: number | null;
+      models?: string[] | null;
+    },
+  ) {
     return apiClient.patch<ApiKey>(`/keys/${id}`, payload);
+  },
+  rotate(id: string) {
+    return apiClient.post<ApiKeyCreated>(`/keys/${id}/rotate`, { confirm: true });
+  },
+  resetSpend(id: string) {
+    return apiClient.post<ApiKey>(`/keys/${id}/reset-spend`, { confirm: true });
   },
   disable(id: string) {
     return apiClient.post<ApiKey>(`/keys/${id}/disable`, { confirm: true });

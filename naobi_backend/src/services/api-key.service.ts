@@ -5,6 +5,7 @@ import { RequestLog } from '../models/RequestLog';
 import { knex } from '../config/database';
 import { litellmAdmin, hashApiKey } from './litellm-admin.service';
 import { encryptionService } from './encryption.service';
+import { litellmTeamService, litellmUserIdForMember } from './litellm-team.service';
 import logger from '../config/logger';
 
 function publicKeyFields(k: ApiKey) {
@@ -16,6 +17,9 @@ function publicKeyFields(k: ApiKey) {
     scope: k.scope,
     budget_max: k.budget_max,
     budget_consumed: k.budget_consumed,
+    rpm_limit: k.rpm_limit ?? null,
+    tpm_limit: k.tpm_limit ?? null,
+    models_allowlist: k.models_allowlist ?? null,
     expires_at: k.expires_at,
     status: k.status,
     last_used_at: k.last_used_at,
@@ -44,10 +48,13 @@ export const apiKeyService = {
     budgetMax?: number | null;
     expiresAt?: Date | null;
     models?: string[];
+    rpmLimit?: number | null;
+    tpmLimit?: number | null;
   }) {
     await litellmAdmin.assertHealthy();
 
-    const litellmUserId = `org-${params.organizationId.slice(0, 8)}-u-${params.userId.slice(0, 8)}`;
+    const teamId = await litellmTeamService.ensureTeamByOrgId(params.organizationId);
+    const litellmUserId = litellmUserIdForMember(params.organizationId, params.userId);
     await litellmAdmin.ensureUser({
       userId: litellmUserId,
       userAlias: params.name,
@@ -60,6 +67,9 @@ export const apiKeyService = {
       models: params.models,
       maxBudget: params.budgetMax ?? null,
       duration: params.expiresAt ? undefined : '365d',
+      teamId,
+      rpmLimit: params.rpmLimit,
+      tpmLimit: params.tpmLimit,
       metadata: {
         organization_id: params.organizationId,
         created_by: params.userId,
@@ -87,6 +97,9 @@ export const apiKeyService = {
       litellm_user_id: litellmUserId,
       litellm_spend: 0,
       litellm_key_encrypted: encryptionService.encryptApiKey(raw),
+      rpm_limit: params.rpmLimit ?? null,
+      tpm_limit: params.tpmLimit ?? null,
+      models_allowlist: params.models ?? null,
     } as any);
 
     return { record, plaintext: raw };
@@ -117,7 +130,14 @@ export const apiKeyService = {
   async update(
     organizationId: string,
     keyId: string,
-    patch: { name?: string; description?: string | null },
+    patch: {
+      name?: string;
+      description?: string | null;
+      budgetMax?: number | null;
+      rpmLimit?: number | null;
+      tpmLimit?: number | null;
+      models?: string[] | null;
+    },
   ) {
     const key = await this.getById(organizationId, keyId);
     if (!key) return null;
@@ -130,8 +150,131 @@ export const apiKeyService = {
     if (patch.description !== undefined) {
       data.description = patch.description?.trim() || null;
     }
+    if (patch.budgetMax !== undefined) {
+      data.budget_max = patch.budgetMax;
+    }
+    if (patch.rpmLimit !== undefined) {
+      data.rpm_limit = patch.rpmLimit;
+    }
+    if (patch.tpmLimit !== undefined) {
+      data.tpm_limit = patch.tpmLimit;
+    }
+    if (patch.models !== undefined) {
+      data.models_allowlist = patch.models;
+    }
+
+    const limitsChanged =
+      patch.budgetMax !== undefined ||
+      patch.rpmLimit !== undefined ||
+      patch.tpmLimit !== undefined ||
+      patch.models !== undefined;
+
+    if (limitsChanged) {
+      const raw = this.resolveVirtualKeyPlaintext(key);
+      if (raw) {
+        try {
+          await litellmAdmin.updateKey({
+            key: raw,
+            maxBudget: patch.budgetMax !== undefined ? patch.budgetMax : undefined,
+            rpmLimit: patch.rpmLimit !== undefined ? patch.rpmLimit : undefined,
+            tpmLimit: patch.tpmLimit !== undefined ? patch.tpmLimit : undefined,
+            models: patch.models !== undefined ? patch.models : undefined,
+          });
+        } catch (err) {
+          logger.warn('LiteLLM key/update failed', { id: key.id, err });
+          throw Object.assign(new Error('PROVIDER_ERROR'), { code: 'PROVIDER_ERROR' });
+        }
+      }
+    }
+
     if (Object.keys(data).length === 0) return key;
-    return key.$query().patchAndFetch(data);
+    return key.$query().patchAndFetch(data as any);
+  },
+
+  /**
+   * Rotate virtual key: regenerate (or delete+generate), re-hash, re-encrypt.
+   * Returns plaintext once.
+   */
+  async rotate(organizationId: string, keyId: string) {
+    const key = await this.getById(organizationId, keyId);
+    if (!key) return null;
+    if (key.status !== 'active' && key.status !== 'disabled') return null;
+
+    await litellmAdmin.assertHealthy();
+    const oldRaw = this.resolveVirtualKeyPlaintext(key);
+    let newRaw: string | null = null;
+    let tokenId = key.litellm_key_id;
+
+    if (oldRaw) {
+      const regenerated = await litellmAdmin.regenerateKey(oldRaw);
+      if (regenerated?.key) {
+        newRaw = regenerated.key;
+        tokenId = regenerated.token_id || regenerated.key_name || tokenId;
+      }
+    }
+
+    if (!newRaw) {
+      // Fallback: delete old + generate new under same user/team
+      if (oldRaw) {
+        try {
+          await litellmAdmin.deleteKey(oldRaw);
+        } catch {
+          /* continue */
+        }
+      }
+      const teamId = await litellmTeamService.ensureTeamByOrgId(organizationId);
+      const litellmUserId =
+        key.litellm_user_id || litellmUserIdForMember(organizationId, key.created_by);
+      await litellmAdmin.ensureUser({
+        userId: litellmUserId,
+        userAlias: key.name,
+        userEmail: `${litellmUserId}@nexusai.local`,
+      });
+      const generated = await litellmAdmin.generateKey({
+        userId: litellmUserId,
+        keyAlias: `${key.name}-rot-${crypto.randomBytes(2).toString('hex')}`.slice(0, 64),
+        models: key.models_allowlist || undefined,
+        maxBudget: key.budget_max != null ? Number(key.budget_max) : null,
+        teamId,
+        rpmLimit: key.rpm_limit,
+        tpmLimit: key.tpm_limit,
+        metadata: { organization_id: organizationId, rotated_from: key.id },
+      });
+      newRaw = generated.key;
+      tokenId = generated.token_id || generated.key_name || null;
+    }
+
+    const updated = await key.$query().patchAndFetch({
+      key_hash: hashApiKey(newRaw),
+      key_prefix: newRaw.slice(0, 12),
+      litellm_key_id: tokenId,
+      litellm_key_encrypted: encryptionService.encryptApiKey(newRaw),
+      status: 'active',
+      budget_consumed: 0,
+      litellm_spend: 0,
+    } as any);
+
+    return { record: updated, plaintext: newRaw };
+  },
+
+  async resetSpend(organizationId: string, keyId: string) {
+    const key = await this.getById(organizationId, keyId);
+    if (!key) return null;
+    if (key.status === 'revoked') return key;
+
+    const raw = this.resolveVirtualKeyPlaintext(key);
+    if (raw) {
+      try {
+        await litellmAdmin.resetKeySpend(raw);
+      } catch (err) {
+        logger.warn('LiteLLM reset spend failed', { id: key.id, err });
+      }
+    }
+
+    return key.$query().patchAndFetch({
+      budget_consumed: 0,
+      litellm_spend: 0,
+    } as any);
   },
 
   async disable(organizationId: string, keyId: string) {

@@ -5,17 +5,19 @@ import { Organization } from '../models/Organization';
 import { OrganizationMember } from '../models/OrganizationMember';
 import { Wallet } from '../models/Wallet';
 import { knex } from '../config/database';
+import { litellmTeamService } from './litellm-team.service';
+import logger from '../config/logger';
 
 export const organizationService = {
   async createForUser(
     userId: string,
     name: string,
-    opts?: { currency?: string },
+    opts?: { currency?: string; email?: string },
   ): Promise<{ organization: Organization; member: OrganizationMember; wallet: Wallet }> {
     const baseSlug = slugify(name, { lower: true, strict: true }) || 'org';
     const slug = `${baseSlug}-${crypto.randomBytes(3).toString('hex')}`;
 
-    return transaction(knex, async (trx) => {
+    const result = await transaction(knex, async (trx) => {
       const organization = await Organization.query(trx).insert({
         name,
         slug,
@@ -39,6 +41,24 @@ export const organizationService = {
 
       return { organization, member, wallet };
     });
+
+    // Best-effort LiteLLM team provision (outside txn)
+    try {
+      await litellmTeamService.ensureTeamForOrg(result.organization);
+      await litellmTeamService.syncMember({
+        organizationId: result.organization.id,
+        userId,
+        role: 'owner',
+        email: opts?.email,
+      });
+    } catch (err) {
+      logger.warn('LiteLLM team provision after org create failed', {
+        orgId: result.organization.id,
+        err,
+      });
+    }
+
+    return result;
   },
 
   async listForUser(userId: string) {
@@ -70,7 +90,7 @@ export const organizationService = {
     const name =
       fullName?.trim() ||
       `${email.split('@')[0]}'s organization`;
-    const created = await this.createForUser(userId, name);
+    const created = await this.createForUser(userId, name, { email });
     return { ...created.organization, role: 'owner' as const, membership_id: created.member.id };
   },
 };

@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useTranslations } from 'next-intl';
 import { toast } from 'sonner';
 import { billingApi } from '@/lib/api/billing.api';
+import { budgetsApi } from '@/lib/api/budgets.api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,6 +34,9 @@ export default function BillingPage() {
   const [ref, setRef] = useState<string | null>(null);
   const [pollStatus, setPollStatus] = useState<any>(null);
   const [claimKey, setClaimKey] = useState('');
+  const [ceiling, setCeiling] = useState('100');
+  const [period, setPeriod] = useState<'day' | 'week' | 'month'>('month');
+  const [overage, setOverage] = useState<'block' | 'alert'>('block');
 
   const { data: packs = [] } = useQuery({
     queryKey: ['packs'],
@@ -62,6 +66,24 @@ export default function BillingPage() {
     enabled: !!org?.id,
     refetchInterval: 30000,
   });
+
+  const { data: activeBudget } = useQuery({
+    queryKey: ['budget-active', org?.id],
+    queryFn: async () => {
+      const res = await budgetsApi.active();
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data;
+    },
+    enabled: !!org?.id,
+  });
+
+  useEffect(() => {
+    if (activeBudget) {
+      setCeiling(String(activeBudget.ceiling));
+      setPeriod(activeBudget.period);
+      setOverage(activeBudget.overage_action);
+    }
+  }, [activeBudget]);
 
   useEffect(() => {
     try {
@@ -131,6 +153,24 @@ export default function BillingPage() {
     onError: (e: Error) => toast.error(e.message),
   });
 
+  const budgetMut = useMutation({
+    mutationFn: async () => {
+      const res = await budgetsApi.upsert({
+        period,
+        ceiling: Number(ceiling),
+        overage_action: overage,
+      });
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data;
+    },
+    onSuccess: () => {
+      toast.success(t('ceilingSaved'));
+      qc.invalidateQueries({ queryKey: ['budget-active'] });
+      qc.invalidateQueries({ queryKey: ['metrics-dashboard'] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   return (
     <div className="flex flex-col gap-8 p-6 md:p-7">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -147,6 +187,62 @@ export default function BillingPage() {
           {t('platformStatus')} · {health?.litellm_healthy ? t('healthy') : t('degraded')}
         </span>
       </div>
+
+      <section className="max-w-lg space-y-4 border border-border bg-card p-5">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wide">{t('ceilings')}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t('ceilingsSub')}</p>
+        </div>
+        {activeBudget ? (
+          <p className="font-mono text-xs text-muted-foreground">
+            {t('activeCeiling')}: {activeBudget.consumed.toFixed(4)} / {activeBudget.ceiling} (
+            {Math.round(activeBudget.usage_ratio * 100)}%)
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">{t('noCeiling')}</p>
+        )}
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label>{t('ceiling')}</Label>
+            <Input
+              type="number"
+              min={0}
+              step="0.01"
+              value={ceiling}
+              onChange={(e) => setCeiling(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label>{t('period')}</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as 'day' | 'week' | 'month')}
+            >
+              <option value="day">{t('periodDay')}</option>
+              <option value="week">{t('periodWeek')}</option>
+              <option value="month">{t('periodMonth')}</option>
+            </select>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>{t('overage')}</Label>
+            <select
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm"
+              value={overage}
+              onChange={(e) => setOverage(e.target.value as 'block' | 'alert')}
+            >
+              <option value="block">{t('overageBlock')}</option>
+              <option value="alert">{t('overageAlert')}</option>
+            </select>
+          </div>
+        </div>
+        <Button
+          disabled={!ceiling || Number(ceiling) <= 0 || budgetMut.isPending}
+          onClick={() => budgetMut.mutate()}
+        >
+          {t('saveCeiling')}
+        </Button>
+      </section>
 
       <section className="grid gap-4 md:grid-cols-2">
         {packs.map((p) => (

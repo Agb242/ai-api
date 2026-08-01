@@ -70,6 +70,15 @@ export function requireOrg(minRole: OrgRole = 'viewer') {
 
     ctx.state.orgId = orgId;
     ctx.state.membership = membership;
+
+    // Soft backfill: ensure LiteLLM team exists for legacy orgs
+    try {
+      const { litellmTeamService } = await import('../services/litellm-team.service');
+      void litellmTeamService.ensureTeamByOrgId(orgId);
+    } catch {
+      /* ignore */
+    }
+
     await next();
   };
 }

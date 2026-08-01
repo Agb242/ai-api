@@ -58,6 +58,8 @@ async function syncSpendJob() {
     .limit(200);
 
   let synced = 0;
+  const spendByOrg = new Map<string, number>();
+
   for (const key of keys) {
     try {
       if (!key.litellm_user_id) continue;
@@ -75,11 +77,25 @@ async function syncSpendJob() {
         litellm_spend: spend,
         litellm_synced_at: new Date().toISOString(),
       } as any);
+      spendByOrg.set(
+        key.organization_id,
+        (spendByOrg.get(key.organization_id) || 0) + spend,
+      );
       synced += 1;
     } catch (err) {
       logger.warn('Spend sync failed for key', { id: key.id, err });
     }
   }
+
+  try {
+    const { budgetService } = await import('../services/budget.service');
+    for (const [orgId, total] of spendByOrg) {
+      await budgetService.syncConsumedFromKeys(orgId, total);
+    }
+  } catch (err) {
+    logger.warn('Org budget sync failed', { err });
+  }
+
   return { synced };
 }
 

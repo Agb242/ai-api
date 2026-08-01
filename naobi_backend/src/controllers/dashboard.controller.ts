@@ -48,7 +48,9 @@ export const orgController = {
   async create(ctx: Context) {
     const { name } = (ctx.request.body || {}) as { name?: string };
     if (!name?.trim()) return fail(ctx, 'MISSING_FIELDS', 400);
-    const created = await organizationService.createForUser(ctx.state.user!.id, name.trim());
+    const created = await organizationService.createForUser(ctx.state.user!.id, name.trim(), {
+      email: ctx.state.user!.email,
+    });
     ok(
       ctx,
       {
@@ -110,17 +112,71 @@ export const keysController = {
   },
 
   async update(ctx: Context) {
-    const body = (ctx.request.body || {}) as { name?: string; description?: string | null };
-    if (body.name === undefined && body.description === undefined) {
+    const body = (ctx.request.body || {}) as {
+      name?: string;
+      description?: string | null;
+      budget_max?: number | null;
+      rpm_limit?: number | null;
+      tpm_limit?: number | null;
+      models?: string[] | null;
+    };
+    if (
+      body.name === undefined &&
+      body.description === undefined &&
+      body.budget_max === undefined &&
+      body.rpm_limit === undefined &&
+      body.tpm_limit === undefined &&
+      body.models === undefined
+    ) {
       return fail(ctx, 'MISSING_FIELDS', 400);
     }
-    const key = await apiKeyService.update(ctx.state.orgId!, ctx.params.id, {
-      name: body.name,
-      description: body.description,
-    });
+    try {
+      const key = await apiKeyService.update(ctx.state.orgId!, ctx.params.id, {
+        name: body.name,
+        description: body.description,
+        budgetMax: body.budget_max,
+        rpmLimit: body.rpm_limit,
+        tpmLimit: body.tpm_limit,
+        models: body.models,
+      });
+      if (!key) return fail(ctx, 'NOT_FOUND', 404);
+      if (key.status === 'revoked') return fail(ctx, 'KEY_REVOKED', 400);
+      ok(ctx, apiKeyService.publicKeyFields(key));
+    } catch (err: any) {
+      if (err?.code === 'PROVIDER_ERROR') return fail(ctx, 'PROVIDER_ERROR', 502);
+      throw err;
+    }
+  },
+
+  async rotate(ctx: Context) {
+    const body = (ctx.request.body || {}) as { confirm?: boolean };
+    if (body.confirm !== true) return fail(ctx, 'CONFIRM_REQUIRED', 400);
+    try {
+      const result = await apiKeyService.rotate(ctx.state.orgId!, ctx.params.id);
+      if (!result) return fail(ctx, 'NOT_FOUND', 404);
+      ok(ctx, {
+        ...apiKeyService.publicKeyFields(result.record),
+        key: result.plaintext,
+        message: t(ctx.state.locale || 'fr', 'KEY_ROTATED'),
+      });
+    } catch (err: any) {
+      if (err?.code === 'LITELLM_UNAVAILABLE' || err?.code === 'LITELLM_NOT_CONFIGURED') {
+        return fail(ctx, err.code, 503);
+      }
+      throw err;
+    }
+  },
+
+  async resetSpend(ctx: Context) {
+    const body = (ctx.request.body || {}) as { confirm?: boolean };
+    if (body.confirm !== true) return fail(ctx, 'CONFIRM_REQUIRED', 400);
+    const key = await apiKeyService.resetSpend(ctx.state.orgId!, ctx.params.id);
     if (!key) return fail(ctx, 'NOT_FOUND', 404);
     if (key.status === 'revoked') return fail(ctx, 'KEY_REVOKED', 400);
-    ok(ctx, apiKeyService.publicKeyFields(key));
+    ok(ctx, {
+      ...apiKeyService.publicKeyFields(key),
+      message: t(ctx.state.locale || 'fr', 'KEY_SPEND_RESET'),
+    });
   },
 
   async disable(ctx: Context) {
@@ -459,6 +515,19 @@ export const membersController = {
     }
 
     await invite.$query().patch({ status: 'accepted' });
+
+    try {
+      const { litellmTeamService } = await import('../services/litellm-team.service');
+      await litellmTeamService.syncMember({
+        organizationId: invite.organization_id,
+        userId: ctx.state.user.id,
+        role: invite.role,
+        email: ctx.state.user.email,
+      });
+    } catch {
+      /* best-effort */
+    }
+
     ok(ctx, { organization_id: invite.organization_id, role: invite.role });
   },
 };

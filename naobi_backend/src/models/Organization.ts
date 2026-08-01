@@ -12,7 +12,7 @@ export class Organization extends BaseModel {
   currency!: string;
   allow_model_fallback!: boolean;
   retain_request_content!: boolean;
-  content_retention_days!: number;
+  litellm_team_id?: string | null;
 
   static relationMappings: RelationMappingsThunk = () => ({
     members: {

@@ -125,19 +125,27 @@ export const litellmAdmin = {
     maxBudget?: number | null;
     duration?: string;
     metadata?: Record<string, unknown>;
+    teamId?: string | null;
+    rpmLimit?: number | null;
+    tpmLimit?: number | null;
   }) {
     await this.assertHealthy();
+    const body: Record<string, unknown> = {
+      user_id: params.userId,
+      key_alias: params.keyAlias.slice(0, 64),
+      models: params.models,
+      max_budget: params.maxBudget ?? undefined,
+      duration: params.duration || '365d',
+      metadata: params.metadata || {},
+    };
+    if (params.teamId) body.team_id = params.teamId;
+    if (params.rpmLimit != null) body.rpm_limit = params.rpmLimit;
+    if (params.tpmLimit != null) body.tpm_limit = params.tpmLimit;
+
     const keyResp = await fetch(`${config.litellm.baseUrl}/key/generate`, {
       method: 'POST',
       headers: headers(),
-      body: JSON.stringify({
-        user_id: params.userId,
-        key_alias: params.keyAlias.slice(0, 64),
-        models: params.models,
-        max_budget: params.maxBudget ?? undefined,
-        duration: params.duration || '365d',
-        metadata: params.metadata || {},
-      }),
+      body: JSON.stringify(body),
     });
     if (!keyResp.ok) {
       const errText = await keyResp.text();
@@ -149,6 +157,259 @@ export const litellmAdmin = {
       token_id?: string;
       key_name?: string;
     };
+  },
+
+  async updateKey(params: {
+    key: string;
+    maxBudget?: number | null;
+    rpmLimit?: number | null;
+    tpmLimit?: number | null;
+    models?: string[] | null;
+    teamId?: string | null;
+    metadata?: Record<string, unknown>;
+  }) {
+    requireConfigured();
+    const body: Record<string, unknown> = { key: params.key };
+    if (params.maxBudget !== undefined) body.max_budget = params.maxBudget;
+    if (params.rpmLimit !== undefined) body.rpm_limit = params.rpmLimit;
+    if (params.tpmLimit !== undefined) body.tpm_limit = params.tpmLimit;
+    if (params.models !== undefined) body.models = params.models;
+    if (params.teamId) body.team_id = params.teamId;
+    if (params.metadata) body.metadata = params.metadata;
+
+    const resp = await fetch(`${config.litellm.baseUrl}/key/update`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /key/update ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async regenerateKey(rawKey: string): Promise<{ key: string; token_id?: string; key_name?: string } | null> {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/key/regenerate`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ key: rawKey }),
+    });
+    if (!resp.ok) {
+      logger.warn('LiteLLM key/regenerate failed', { status: resp.status });
+      return null;
+    }
+    return (await resp.json()) as { key: string; token_id?: string; key_name?: string };
+  },
+
+  async resetKeySpend(rawKey: string): Promise<boolean> {
+    requireConfigured();
+    const encoded = encodeURIComponent(rawKey);
+    let resp = await fetch(`${config.litellm.baseUrl}/key/${encoded}/reset_spend`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({}),
+    });
+    if (resp.ok) return true;
+    resp = await fetch(`${config.litellm.baseUrl}/key/update`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({ key: rawKey, spend: 0 }),
+    });
+    return resp.ok;
+  },
+
+  async teamNew(params: {
+    teamAlias: string;
+    teamId?: string;
+    maxBudget?: number | null;
+    models?: string[];
+    metadata?: Record<string, unknown>;
+  }) {
+    await this.assertHealthy();
+    const resp = await fetch(`${config.litellm.baseUrl}/team/new`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        team_alias: params.teamAlias,
+        team_id: params.teamId || params.teamAlias,
+        max_budget: params.maxBudget ?? undefined,
+        models: params.models,
+        metadata: params.metadata || {},
+      }),
+    });
+    if (!resp.ok && resp.status !== 409) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /team/new ${resp.status}: ${errText}`);
+    }
+    if (resp.status === 409) {
+      return { team_id: params.teamId || params.teamAlias };
+    }
+    const data = (await resp.json()) as { team_id?: string; team_alias?: string };
+    return { team_id: data.team_id || params.teamId || params.teamAlias, ...data };
+  },
+
+  async teamInfo(teamId: string) {
+    requireConfigured();
+    const resp = await fetch(
+      `${config.litellm.baseUrl}/team/info?team_id=${encodeURIComponent(teamId)}`,
+      { headers: headers() },
+    );
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /team/info ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async teamUpdate(params: {
+    teamId: string;
+    maxBudget?: number | null;
+    models?: string[];
+    metadata?: Record<string, unknown>;
+  }) {
+    requireConfigured();
+    const body: Record<string, unknown> = { team_id: params.teamId };
+    if (params.maxBudget !== undefined) body.max_budget = params.maxBudget;
+    if (params.models) body.models = params.models;
+    if (params.metadata) body.metadata = params.metadata;
+    const resp = await fetch(`${config.litellm.baseUrl}/team/update`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /team/update ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async teamMemberAdd(params: {
+    teamId: string;
+    userId: string;
+    role?: 'admin' | 'user';
+  }) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/team/member_add`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        team_id: params.teamId,
+        member: {
+          user_id: params.userId,
+          role: params.role || 'user',
+        },
+      }),
+    });
+    if (!resp.ok && resp.status !== 409) {
+      const errText = await resp.text();
+      logger.warn('LiteLLM team/member_add failed', { status: resp.status, err: errText });
+      return false;
+    }
+    return true;
+  },
+
+  async teamMemberDelete(params: { teamId: string; userId: string }) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/team/member_delete`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        team_id: params.teamId,
+        user_id: params.userId,
+      }),
+    });
+    return resp.ok || resp.status === 404;
+  },
+
+  async teamDailyActivity(params: {
+    teamId: string;
+    startDate: string;
+    endDate: string;
+  }): Promise<Record<string, unknown> | null> {
+    if (!this.configured() || !params.teamId) return null;
+    try {
+      const q = new URLSearchParams({
+        team_id: params.teamId,
+        start_date: params.startDate,
+        end_date: params.endDate,
+      });
+      const resp = await fetch(`${config.litellm.baseUrl}/team/daily/activity?${q}`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!resp.ok) return null;
+      return (await resp.json()) as Record<string, unknown>;
+    } catch (err) {
+      logger.warn('LiteLLM teamDailyActivity failed', { err });
+      return null;
+    }
+  },
+
+  async spendTags(opts?: {
+    startDate?: string;
+    endDate?: string;
+  }): Promise<any[] | null> {
+    if (!this.configured()) return null;
+    try {
+      const q = new URLSearchParams();
+      if (opts?.startDate) q.set('start_date', opts.startDate);
+      if (opts?.endDate) q.set('end_date', opts.endDate);
+      const qs = q.toString();
+      const resp = await fetch(
+        `${config.litellm.baseUrl}/spend/tags${qs ? `?${qs}` : ''}`,
+        { headers: headers(), signal: AbortSignal.timeout(20000) },
+      );
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (Array.isArray(data)) return data;
+      if (Array.isArray((data as any)?.data)) return (data as any).data;
+      return null;
+    } catch (err) {
+      logger.warn('LiteLLM spendTags failed', { err });
+      return null;
+    }
+  },
+
+  async budgetNew(params: {
+    maxBudget: number;
+    budgetDuration?: string;
+    budgetId?: string;
+  }) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/new`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        max_budget: params.maxBudget,
+        budget_duration: params.budgetDuration || '30d',
+        budget_id: params.budgetId,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/new ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async budgetUpdate(params: { budgetId: string; maxBudget: number }) {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/budget/update`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify({
+        budget_id: params.budgetId,
+        max_budget: params.maxBudget,
+      }),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM /budget/update ${resp.status}: ${errText}`);
+    }
+    return resp.json();
   },
 
   async ensureUser(params: { userId: string; userAlias: string; userEmail: string }) {
