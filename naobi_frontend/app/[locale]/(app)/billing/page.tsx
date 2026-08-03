@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { cn } from '@/lib/utils';
+import { readPlatformHealthy } from '@/lib/platform-fields';
 
 type Pack = {
   id: string;
@@ -58,14 +59,16 @@ export default function BillingPage() {
   });
 
   const { data: health } = useQuery({
-    queryKey: ['litellm-health'],
+    queryKey: ['platform-health'],
     queryFn: async () => {
-      const res = await billingApi.litellmHealth();
-      return res.data as any;
+      const res = await billingApi.platformHealth();
+      return (res.data || {}) as Record<string, unknown>;
     },
     enabled: !!org?.id,
     refetchInterval: 30000,
   });
+
+  const platformHealthy = readPlatformHealthy(health);
 
   const { data: activeBudget } = useQuery({
     queryKey: ['budget-active', org?.id],
@@ -181,10 +184,10 @@ export default function BillingPage() {
         <span
           className={cn(
             'font-mono text-[11px] uppercase tracking-wide',
-            health?.litellm_healthy ? 'text-[hsl(var(--success))]' : 'text-muted-foreground',
+            platformHealthy ? 'text-[hsl(var(--success))]' : 'text-muted-foreground',
           )}
         >
-          {t('platformStatus')} · {health?.litellm_healthy ? t('healthy') : t('degraded')}
+          {t('platformStatus')} · {platformHealthy ? t('healthy') : t('degraded')}
         </span>
       </div>
 

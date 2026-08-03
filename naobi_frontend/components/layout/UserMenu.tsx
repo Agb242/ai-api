@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Building2, KeyRound, LogOut, MessageSquare, Settings, Users } from 'lucide-react';
+import { Building2, KeyRound, LogOut, MessageSquare, Settings, Users, Percent } from 'lucide-react';
 
 export function UserMenu() {
   const t = useTranslations('header');
@@ -101,6 +101,14 @@ export function UserMenu() {
             {tNav('team')}
           </Link>
         </DropdownMenuItem>
+        {user?.is_platform_admin ? (
+          <DropdownMenuItem asChild>
+            <Link href="/platform/pricing" className="cursor-pointer">
+              <Percent className="size-4" />
+              {t('platformPricing')}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
         <DropdownMenuSeparator />
         <DropdownMenuItem
           variant="destructive"

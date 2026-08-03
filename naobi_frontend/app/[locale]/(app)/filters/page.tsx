@@ -33,6 +33,16 @@ export default function FiltersPage() {
     enabled: !!org?.id,
   });
 
+  const { data: guardrail } = useQuery({
+    queryKey: ['guardrail', org?.id],
+    queryFn: async () => {
+      const res = await filtersApi.guardrailStatus();
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data as { enabled: boolean; configured: boolean };
+    },
+    enabled: !!org?.id,
+  });
+
   const createMut = useMutation({
     mutationFn: async () => {
       const res = await filtersApi.create({
@@ -61,6 +71,21 @@ export default function FiltersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ['filters'] }),
   });
 
+  const guardrailMut = useMutation({
+    mutationFn: async (enable: boolean) => {
+      const res = enable
+        ? await filtersApi.enableGuardrail()
+        : await filtersApi.disableGuardrail();
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['guardrail'] });
+      toast.success(t('guardrailToggle'));
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   async function runTest() {
     const res = await filtersApi.test({
       sample: form.sample,
@@ -75,6 +100,27 @@ export default function FiltersPage() {
   return (
     <div className="flex flex-col gap-5 p-6 md:p-7">
       <h1 className="font-display text-lg font-semibold">{t('title')}</h1>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+        <div>
+          <p className="text-sm font-medium">{t('guardrailTitle')}</p>
+          <p className="text-xs text-muted-foreground">{t('guardrailHint')}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground">
+            {guardrail?.enabled ? t('guardrailOn') : t('guardrailOff')}
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={guardrailMut.isPending}
+            onClick={() => guardrailMut.mutate(!guardrail?.enabled)}
+          >
+            {t('guardrailToggle')}
+          </Button>
+        </div>
+      </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-3 rounded-xl border border-border bg-card p-4">

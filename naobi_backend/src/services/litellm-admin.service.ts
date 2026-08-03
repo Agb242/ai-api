@@ -788,6 +788,180 @@ export const litellmAdmin = {
     }
     return true;
   },
+
+  async listAudit(opts?: { startDate?: string; endDate?: string }): Promise<any[] | null> {
+    if (!this.configured()) return null;
+    try {
+      const q = new URLSearchParams();
+      if (opts?.startDate) q.set('start_date', opts.startDate);
+      if (opts?.endDate) q.set('end_date', opts.endDate);
+      const qs = q.toString();
+      const resp = await fetch(`${config.litellm.baseUrl}/audit${qs ? `?${qs}` : ''}`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (Array.isArray(data)) return data;
+      if (Array.isArray((data as any)?.data)) return (data as any).data;
+      return null;
+    } catch (err) {
+      logger.warn('LiteLLM listAudit failed', { err });
+      return null;
+    }
+  },
+
+  async getCostMarginConfig(): Promise<unknown | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/config/cost_margin_config`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async setCostMarginConfig(body: unknown): Promise<unknown> {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/config/cost_margin_config`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM cost_margin_config ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async getCostDiscountConfig(): Promise<unknown | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/config/cost_discount_config`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) return null;
+      return resp.json();
+    } catch {
+      return null;
+    }
+  },
+
+  async setCostDiscountConfig(body: unknown): Promise<unknown> {
+    requireConfigured();
+    const resp = await fetch(`${config.litellm.baseUrl}/config/cost_discount_config`, {
+      method: 'POST',
+      headers: headers(),
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const errText = await resp.text();
+      throw new Error(`LiteLLM cost_discount_config ${resp.status}: ${errText}`);
+    }
+    return resp.json();
+  },
+
+  async listGuardrails(): Promise<any[] | null> {
+    if (!this.configured()) return null;
+    try {
+      let resp = await fetch(`${config.litellm.baseUrl}/v2/guardrails/list`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) {
+        resp = await fetch(`${config.litellm.baseUrl}/guardrails/list`, {
+          headers: headers(),
+          signal: AbortSignal.timeout(10000),
+        });
+      }
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      if (Array.isArray(data)) return data;
+      if (Array.isArray((data as any)?.guardrails)) return (data as any).guardrails;
+      if (Array.isArray((data as any)?.data)) return (data as any).data;
+      return null;
+    } catch {
+      return null;
+    }
+  },
+
+  async registerGuardrail(params: {
+    guardrailName: string;
+    litellmParams?: Record<string, unknown>;
+  }): Promise<{ guardrail_id?: string; guardrail_name?: string } | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/guardrails/register`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          guardrail_name: params.guardrailName,
+          litellm_params: params.litellmParams || {
+            guardrail: 'custom_code',
+            mode: 'pre_call',
+          },
+        }),
+        signal: AbortSignal.timeout(20000),
+      });
+      if (!resp.ok) {
+        logger.warn('LiteLLM registerGuardrail failed', { status: resp.status });
+        return null;
+      }
+      return (await resp.json()) as { guardrail_id?: string; guardrail_name?: string };
+    } catch (err) {
+      logger.warn('LiteLLM registerGuardrail error', { err });
+      return null;
+    }
+  },
+
+  async applyGuardrail(params: {
+    guardrailName?: string;
+    text: string;
+  }): Promise<{ blocked: boolean; response?: unknown } | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}/guardrails/apply_guardrail`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify({
+          guardrail_name: params.guardrailName,
+          texts: [params.text],
+        }),
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!resp.ok) return null;
+      const data = (await resp.json()) as any;
+      const blocked =
+        data?.blocked === true ||
+        data?.action === 'BLOCKED' ||
+        (Array.isArray(data?.responses) &&
+          data.responses.some((r: any) => r?.blocked || r?.action === 'BLOCKED'));
+      return { blocked: !!blocked, response: data };
+    } catch {
+      return null;
+    }
+  },
+
+  async complianceCheck(kind: 'gdpr' | 'eu-ai-act'): Promise<unknown | null> {
+    if (!this.configured()) return null;
+    try {
+      const path = kind === 'gdpr' ? '/compliance/gdpr' : '/compliance/eu-ai-act';
+      const resp = await fetch(`${config.litellm.baseUrl}${path}`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!resp.ok) return { available: false, status: resp.status };
+      return { available: true, data: await resp.json() };
+    } catch {
+      return { available: false };
+    }
+  },
 };
 
 export function hashApiKey(raw: string): string {

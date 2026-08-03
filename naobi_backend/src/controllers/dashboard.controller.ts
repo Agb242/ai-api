@@ -10,6 +10,7 @@ import { Invitation } from '../models/Invitation';
 import { t } from '../i18n/messages';
 import crypto from 'crypto';
 import { knex } from '../config/database';
+import { auditService } from '../services/audit.service';
 
 function ok(ctx: Context, data: unknown, status = 200) {
   ctx.status = status;
@@ -87,28 +88,42 @@ export const keysController = {
       scope?: string;
       budget_max?: number;
       expires_at?: string;
+      models?: string[];
+      rpm_limit?: number;
+      tpm_limit?: number;
     };
     if (!body.name?.trim()) return fail(ctx, 'MISSING_FIELDS', 400);
 
-    const { record, plaintext } = await apiKeyService.create({
-      organizationId: ctx.state.orgId!,
-      userId: ctx.state.user!.id,
-      name: body.name.trim(),
-      description: body.description ?? null,
-      scope: body.scope,
-      budgetMax: body.budget_max ?? null,
-      expiresAt: body.expires_at ? new Date(body.expires_at) : null,
-    });
+    try {
+      const { record, plaintext } = await apiKeyService.create({
+        organizationId: ctx.state.orgId!,
+        userId: ctx.state.user!.id,
+        name: body.name.trim(),
+        description: body.description ?? null,
+        scope: body.scope,
+        budgetMax: body.budget_max ?? null,
+        expiresAt: body.expires_at ? new Date(body.expires_at) : null,
+        models: body.models,
+        rpmLimit: body.rpm_limit ?? null,
+        tpmLimit: body.tpm_limit ?? null,
+      });
 
-    ok(
-      ctx,
-      {
-        ...apiKeyService.publicKeyFields(record),
-        key: plaintext,
-        message: t(ctx.state.locale || 'fr', 'KEY_CREATED'),
-      },
-      201,
-    );
+      ok(
+        ctx,
+        {
+          ...apiKeyService.publicKeyFields(record),
+          key: plaintext,
+          message: t(ctx.state.locale || 'fr', 'KEY_CREATED'),
+        },
+        201,
+      );
+    } catch (err: any) {
+      if (err?.code === 'MODEL_NOT_FOUND') return fail(ctx, 'MODEL_NOT_FOUND', 400);
+      if (err?.code === 'LITELLM_UNAVAILABLE' || err?.code === 'LITELLM_NOT_CONFIGURED') {
+        return fail(ctx, err.code, 503);
+      }
+      throw err;
+    }
   },
 
   async update(ctx: Context) {
@@ -143,6 +158,7 @@ export const keysController = {
       if (key.status === 'revoked') return fail(ctx, 'KEY_REVOKED', 400);
       ok(ctx, apiKeyService.publicKeyFields(key));
     } catch (err: any) {
+      if (err?.code === 'MODEL_NOT_FOUND') return fail(ctx, 'MODEL_NOT_FOUND', 400);
       if (err?.code === 'PROVIDER_ERROR') return fail(ctx, 'PROVIDER_ERROR', 502);
       throw err;
     }
@@ -318,13 +334,18 @@ export const filtersController = {
   },
 
   async update(ctx: Context) {
-    const rule = await filterService.update(ctx.state.orgId!, ctx.params.id, ctx.request.body as any);
+    const rule = await filterService.update(
+      ctx.state.orgId!,
+      ctx.params.id,
+      ctx.request.body as any,
+      ctx.state.user!.id,
+    );
     if (!rule) return fail(ctx, 'NOT_FOUND', 404);
     ok(ctx, rule);
   },
 
   async remove(ctx: Context) {
-    const n = await filterService.remove(ctx.state.orgId!, ctx.params.id);
+    const n = await filterService.remove(ctx.state.orgId!, ctx.params.id, ctx.state.user!.id);
     if (!n) return fail(ctx, 'NOT_FOUND', 404);
     ok(ctx, { deleted: true });
   },
@@ -335,6 +356,33 @@ export const filtersController = {
       return fail(ctx, 'MISSING_FIELDS', 400);
     }
     ok(ctx, filterService.test(body.sample, body.type, body.pattern, body.action));
+  },
+
+  async enableGuardrail(ctx: Context) {
+    const { guardrailService } = await import('../services/catalog.service');
+    const org = await guardrailService.enableForOrg({
+      organizationId: ctx.state.orgId!,
+      actorUserId: ctx.state.user!.id,
+    });
+    if (!org) return fail(ctx, 'NOT_FOUND', 404);
+    ok(ctx, { enabled: true });
+  },
+
+  async disableGuardrail(ctx: Context) {
+    const { guardrailService } = await import('../services/catalog.service');
+    const org = await guardrailService.disableForOrg({
+      organizationId: ctx.state.orgId!,
+      actorUserId: ctx.state.user!.id,
+    });
+    if (!org) return fail(ctx, 'NOT_FOUND', 404);
+    ok(ctx, { enabled: false });
+  },
+
+  async guardrailStatus(ctx: Context) {
+    const { guardrailService } = await import('../services/catalog.service');
+    const status = await guardrailService.status(ctx.state.orgId!);
+    if (!status) return fail(ctx, 'NOT_FOUND', 404);
+    ok(ctx, status);
   },
 };
 
@@ -410,8 +458,11 @@ export const metricsController = {
       .first();
 
     const { litellmSyncService } = await import('../services/litellm-sync.service');
+    const { catalogService } = await import('../services/catalog.service');
     const liveModels = await litellmSyncService.liveModels();
     const catalog = catalogPublicPayload(liveModels);
+    const allowlist = await catalogService.getAllowedModelsForOrg(orgId);
+    catalog.data = catalogService.filterModelList(catalog.data as any[], allowlist);
 
     ok(ctx, {
       metrics: {
@@ -448,11 +499,14 @@ export const metricsController = {
 export const modelsController = {
   async list(ctx: Context) {
     const { litellmSyncService } = await import('../services/litellm-sync.service');
+    const { catalogService } = await import('../services/catalog.service');
     const live = await litellmSyncService.liveModels();
     const payload = catalogPublicPayload(live);
     if (!payload.data.length && payload.catalog_status === 'degraded') {
       return fail(ctx, 'LITELLM_UNAVAILABLE', 503);
     }
+    const allowlist = await catalogService.getAllowedModelsForOrg(ctx.state.orgId!);
+    payload.data = catalogService.filterModelList(payload.data as any[], allowlist);
     ok(ctx, payload);
   },
 };
@@ -480,6 +534,15 @@ export const membersController = {
       token,
       status: 'pending',
       expires_at: expires.toISOString(),
+    });
+
+    await auditService.record({
+      organizationId: ctx.state.orgId!,
+      actorUserId: ctx.state.user!.id,
+      action: 'member.invite',
+      resourceType: 'invitation',
+      resourceId: invite.id,
+      metadata: { email: invite.email, role: invite.role },
     });
 
     ok(ctx, invite, 201);

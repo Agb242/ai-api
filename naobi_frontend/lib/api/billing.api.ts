@@ -22,13 +22,14 @@ export const billingApi = {
   history() {
     return apiClient.get('/billing/history');
   },
-  litellmHealth() {
+  /** Upstream inference health — path kept for API compatibility. */
+  platformHealth() {
     return apiClient.get('/billing/litellm/health');
   },
-  litellmUsage(key: string) {
+  platformUsage(key: string) {
     return apiClient.post('/billing/litellm/usage', { key });
   },
-  litellmModels() {
+  platformModels() {
     return apiClient.get('/billing/litellm/models');
   },
 };

@@ -13,6 +13,8 @@ export class Organization extends BaseModel {
   allow_model_fallback!: boolean;
   retain_request_content!: boolean;
   litellm_team_id?: string | null;
+  litellm_guardrail_id?: string | null;
+  enterprise_guardrail_enabled?: boolean;
 
   static relationMappings: RelationMappingsThunk = () => ({
     members: {

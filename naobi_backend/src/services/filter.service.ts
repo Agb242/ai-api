@@ -1,5 +1,6 @@
 import { FilterRule, FilterAction } from '../models/FilterRule';
 import { knex } from '../config/database';
+import { auditService } from './audit.service';
 
 export interface FilterResult {
   action: 'pass' | 'block' | 'redact';
@@ -81,7 +82,7 @@ export const filterService = {
     action: FilterAction;
     active?: boolean;
   }) {
-    return FilterRule.query().insert({
+    const rule = await FilterRule.query().insert({
       organization_id: params.organizationId,
       created_by: params.userId,
       name: params.name,
@@ -90,20 +91,48 @@ export const filterService = {
       action: params.action,
       active: params.active ?? true,
     });
+    await auditService.record({
+      organizationId: params.organizationId,
+      actorUserId: params.userId,
+      action: 'filter.create',
+      resourceType: 'filter_rule',
+      resourceId: rule.id,
+      metadata: { name: params.name },
+    });
+    return rule;
   },
 
   async update(
     organizationId: string,
     ruleId: string,
     patch: Partial<Pick<FilterRule, 'name' | 'type' | 'pattern' | 'action' | 'active'>>,
+    actorUserId?: string | null,
   ) {
     const rule = await FilterRule.query().findOne({ id: ruleId, organization_id: organizationId });
     if (!rule) return null;
-    return rule.$query().patchAndFetch(patch);
+    const updated = await rule.$query().patchAndFetch(patch);
+    await auditService.record({
+      organizationId,
+      actorUserId,
+      action: 'filter.update',
+      resourceType: 'filter_rule',
+      resourceId: ruleId,
+    });
+    return updated;
   },
 
-  async remove(organizationId: string, ruleId: string) {
-    return FilterRule.query().delete().where({ id: ruleId, organization_id: organizationId });
+  async remove(organizationId: string, ruleId: string, actorUserId?: string | null) {
+    const n = await FilterRule.query().delete().where({ id: ruleId, organization_id: organizationId });
+    if (n) {
+      await auditService.record({
+        organizationId,
+        actorUserId,
+        action: 'filter.delete',
+        resourceType: 'filter_rule',
+        resourceId: ruleId,
+      });
+    }
+    return n;
   },
 
   /** Test a rule against sample text without side effects. */

@@ -1,6 +1,7 @@
 import Router from '@koa/router';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireOrg } from '../middleware/org.middleware';
+import { requirePlatformAdmin } from '../middleware/platform.middleware';
 import {
   orgController,
   keysController,
@@ -12,6 +13,11 @@ import {
   membersController,
 } from '../controllers/dashboard.controller';
 import { budgetsController, analyticsController } from '../controllers/budgets.controller';
+import {
+  auditController,
+  platformController,
+  complianceController,
+} from '../controllers/audit.controller';
 
 const router = new Router();
 
@@ -51,6 +57,24 @@ router.post('/filters', authenticate, requireOrg('admin'), filtersController.cre
 router.patch('/filters/:id', authenticate, requireOrg('admin'), filtersController.update);
 router.delete('/filters/:id', authenticate, requireOrg('admin'), filtersController.remove);
 router.post('/filters/test', authenticate, requireOrg('admin'), filtersController.test);
+router.get(
+  '/filters/guardrail',
+  authenticate,
+  requireOrg('admin'),
+  filtersController.guardrailStatus,
+);
+router.post(
+  '/filters/guardrail/enable',
+  authenticate,
+  requireOrg('admin'),
+  filtersController.enableGuardrail,
+);
+router.post(
+  '/filters/guardrail/disable',
+  authenticate,
+  requireOrg('admin'),
+  filtersController.disableGuardrail,
+);
 
 router.get('/logs', authenticate, requireOrg('viewer'), logsController.list);
 router.get('/metrics/dashboard', authenticate, requireOrg('viewer'), metricsController.dashboard);
@@ -59,5 +83,21 @@ router.get('/models', authenticate, requireOrg('viewer'), modelsController.list)
 router.get('/members', authenticate, requireOrg('viewer'), membersController.list);
 router.post('/members/invite', authenticate, requireOrg('admin'), membersController.invite);
 router.post('/members/invite/:token/accept', authenticate, membersController.acceptInvite);
+
+router.get('/audit', authenticate, requireOrg('admin'), auditController.list);
+router.get('/audit/export', authenticate, requireOrg('owner'), auditController.exportCsv);
+
+router.get('/compliance/export', authenticate, requireOrg('owner'), complianceController.export);
+router.get(
+  '/compliance/checklist',
+  authenticate,
+  requireOrg('viewer'),
+  complianceController.checklist,
+);
+
+router.get('/platform/pricing', authenticate, requirePlatformAdmin, platformController.getPricing);
+router.put('/platform/pricing', authenticate, requirePlatformAdmin, platformController.putPricing);
+router.get('/platform/admins', authenticate, requirePlatformAdmin, platformController.listAdmins);
+router.post('/platform/admins/invite', authenticate, requirePlatformAdmin, platformController.inviteAdmin);
 
 export default router;

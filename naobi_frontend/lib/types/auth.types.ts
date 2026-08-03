@@ -6,6 +6,7 @@ export interface User {
   full_name?: string;
   avatar_url?: string;
   email_verified: boolean;
+  is_platform_admin?: boolean;
   created_at: string;
   updated_at: string;
 }

@@ -12,6 +12,7 @@ import {
   estimateTokensForClass,
 } from './llm/endpoint-class';
 import { budgetService } from './budget.service';
+import { guardrailService } from './catalog.service';
 import logger from '../config/logger';
 
 export function estimateCost(
@@ -147,6 +148,43 @@ export const gatewayService = {
         throw Object.assign(new Error('REQUEST_BLOCKED'), {
           code: 'REQUEST_BLOCKED',
           ruleName: rule.name,
+          logId: log.id,
+        });
+      }
+    }
+
+    // Enterprise LiteLLM guardrail (best-effort, after local filters)
+    if (classified.applyFilters && body) {
+      const text =
+        filterResult.content ||
+        (typeof (payload as any).prompt === 'string'
+          ? (payload as any).prompt
+          : JSON.stringify(payload).slice(0, 4000));
+      const blocked = await guardrailService.shouldBlock(organization.id, text);
+      if (blocked) {
+        const log = await RequestLog.query().insert({
+          organization_id: organization.id,
+          api_key_id: apiKey.id,
+          model_uuid: model?.id || null,
+          model_id: model?.model_id || modelId || null,
+          tokens_input: 0,
+          tokens_output: 0,
+          cost: 0,
+          status: 'blocked',
+          filter_action: 'block',
+          error_code: 'GUARDRAIL',
+          streamed: !!(body as any).stream,
+        });
+        const { auditService } = await import('./audit.service');
+        await auditService.record({
+          organizationId: organization.id,
+          action: 'guardrail.block',
+          resourceType: 'request_log',
+          resourceId: log.id,
+        });
+        throw Object.assign(new Error('REQUEST_BLOCKED'), {
+          code: 'REQUEST_BLOCKED',
+          ruleName: 'enterprise_guardrail',
           logId: log.id,
         });
       }

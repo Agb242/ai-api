@@ -111,7 +111,15 @@ async function cleanupJob() {
     .orWhere({ used: true })
     .delete();
   const sessionsDeleted = await Session.query().where('expires_at', '<', now).delete();
-  return { otpDeleted, sessionsDeleted };
+  let auditDeleted = 0;
+  try {
+    const { auditService } = await import('../services/audit.service');
+    const purged = await auditService.purgeExpired();
+    auditDeleted = purged.deleted;
+  } catch {
+    /* table may not exist yet */
+  }
+  return { otpDeleted, sessionsDeleted, auditDeleted };
 }
 
 export async function getCachedModels(): Promise<any | null> {

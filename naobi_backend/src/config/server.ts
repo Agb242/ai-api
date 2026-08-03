@@ -86,6 +86,10 @@ export const config = {
   },
 
   encryptionKey: requireEnv('ENCRYPTION_KEY', 'noabi_dev_encryption_key_change_me'),
+
+  platformAdminEmails: [] as string[],
+
+  auditRetentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS || '90', 10) || 90,
 };
 
 /** Extra CORS origins (comma-separated), e.g. https://noabi.checkflow.space */

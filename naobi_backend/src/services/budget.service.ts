@@ -4,6 +4,7 @@ import { OrganizationMember } from '../models/OrganizationMember';
 import { litellmAdmin } from './litellm-admin.service';
 import { litellmTeamService } from './litellm-team.service';
 import { emailService } from './email.service';
+import { auditService } from './audit.service';
 import logger from '../config/logger';
 
 function periodBounds(period: 'day' | 'week' | 'month', from = new Date()) {
@@ -66,6 +67,7 @@ export const budgetService = {
     period: 'day' | 'week' | 'month';
     ceiling: number;
     overageAction?: 'block' | 'alert';
+    actorUserId?: string | null;
   }) {
     const { start, end } = periodBounds(params.period);
     const overage = params.overageAction || 'block';
@@ -107,6 +109,15 @@ export const budgetService = {
         err,
       });
     }
+
+    await auditService.record({
+      organizationId: params.organizationId,
+      actorUserId: params.actorUserId,
+      action: 'budget.upsert',
+      resourceType: 'budget',
+      resourceId: budget.id,
+      metadata: { period: params.period, ceiling: params.ceiling },
+    });
 
     return budget;
   },

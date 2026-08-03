@@ -373,15 +373,27 @@ export const gatewayController = {
   async listModels(ctx: Context): Promise<void> {
     try {
       const { litellmSyncService } = await import('../services/litellm-sync.service');
+      const { catalogService } = await import('../services/catalog.service');
       const live = await litellmSyncService.liveModels();
       if (!live.litellm_healthy) {
         errorBody(ctx, 'LITELLM_UNAVAILABLE', 503);
         return;
       }
+      let data = Array.isArray((live as any).data) ? (live as any).data : [];
+      const orgId = ctx.state.organization?.id;
+      if (orgId) {
+        const allowlist = await catalogService.getAllowedModelsForOrg(orgId);
+        data = catalogService.filterModelList(data, allowlist);
+      }
+      // Also intersect with key-level allowlist when present
+      const keyModels = ctx.state.apiKey?.models_allowlist;
+      if (Array.isArray(keyModels) && keyModels.length) {
+        data = catalogService.filterModelList(data, keyModels.map(String));
+      }
       ctx.status = 200;
       ctx.body = {
         object: 'list',
-        data: Array.isArray((live as any).data) ? (live as any).data : [],
+        data,
       };
     } catch {
       errorBody(ctx, 'LITELLM_UNAVAILABLE', 503);

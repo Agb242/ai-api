@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/alert-dialog';
 import { Link } from '@/i18n/routing';
 import { useAuthStore } from '@/lib/stores/auth.store';
+import { readPlatformSpend } from '@/lib/platform-fields';
 
 export default function KeysPage() {
   const t = useTranslations('keys');
@@ -108,7 +109,10 @@ export default function KeysPage() {
                       : '—'}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
-                    {k.litellm_spend != null ? Number(k.litellm_spend).toFixed(4) : '—'}
+                    {(() => {
+                      const spend = readPlatformSpend(k as unknown as Record<string, unknown>);
+                      return spend != null ? spend.toFixed(4) : '—';
+                    })()}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex justify-end gap-2">

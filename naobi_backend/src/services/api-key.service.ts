@@ -6,6 +6,8 @@ import { knex } from '../config/database';
 import { litellmAdmin, hashApiKey } from './litellm-admin.service';
 import { encryptionService } from './encryption.service';
 import { litellmTeamService, litellmUserIdForMember } from './litellm-team.service';
+import { catalogService } from './catalog.service';
+import { auditService } from './audit.service';
 import logger from '../config/logger';
 
 function publicKeyFields(k: ApiKey) {
@@ -53,6 +55,13 @@ export const apiKeyService = {
   }) {
     await litellmAdmin.assertHealthy();
 
+    const allowlist = await catalogService.getAllowedModelsForOrg(params.organizationId);
+    catalogService.assertModelsAllowed(params.models, allowlist);
+    const models =
+      params.models && params.models.length
+        ? params.models
+        : allowlist || undefined;
+
     const teamId = await litellmTeamService.ensureTeamByOrgId(params.organizationId);
     const litellmUserId = litellmUserIdForMember(params.organizationId, params.userId);
     await litellmAdmin.ensureUser({
@@ -64,7 +73,7 @@ export const apiKeyService = {
     const generated = await litellmAdmin.generateKey({
       userId: litellmUserId,
       keyAlias: `${params.name}-${crypto.randomBytes(3).toString('hex')}`.slice(0, 64),
-      models: params.models,
+      models,
       maxBudget: params.budgetMax ?? null,
       duration: params.expiresAt ? undefined : '365d',
       teamId,
@@ -99,8 +108,17 @@ export const apiKeyService = {
       litellm_key_encrypted: encryptionService.encryptApiKey(raw),
       rpm_limit: params.rpmLimit ?? null,
       tpm_limit: params.tpmLimit ?? null,
-      models_allowlist: params.models ?? null,
+      models_allowlist: models ?? null,
     } as any);
+
+    await auditService.record({
+      organizationId: params.organizationId,
+      actorUserId: params.userId,
+      action: 'key.create',
+      resourceType: 'api_key',
+      resourceId: record.id,
+      metadata: { name: params.name },
+    });
 
     return { record, plaintext: raw };
   },
@@ -160,6 +178,8 @@ export const apiKeyService = {
       data.tpm_limit = patch.tpmLimit;
     }
     if (patch.models !== undefined) {
+      const allowlist = await catalogService.getAllowedModelsForOrg(organizationId);
+      catalogService.assertModelsAllowed(patch.models || undefined, allowlist);
       data.models_allowlist = patch.models;
     }
 
@@ -188,7 +208,15 @@ export const apiKeyService = {
     }
 
     if (Object.keys(data).length === 0) return key;
-    return key.$query().patchAndFetch(data as any);
+    const updated = await key.$query().patchAndFetch(data as any);
+    await auditService.record({
+      organizationId,
+      action: 'key.update',
+      resourceType: 'api_key',
+      resourceId: keyId,
+      metadata: { fields: Object.keys(patch) },
+    });
+    return updated;
   },
 
   /**
@@ -254,6 +282,13 @@ export const apiKeyService = {
       litellm_spend: 0,
     } as any);
 
+    await auditService.record({
+      organizationId,
+      action: 'key.rotate',
+      resourceType: 'api_key',
+      resourceId: keyId,
+    });
+
     return { record: updated, plaintext: newRaw };
   },
 
@@ -292,7 +327,14 @@ export const apiKeyService = {
       }
     }
 
-    return key.$query().patchAndFetch({ status: 'disabled' as ApiKeyStatus });
+    const disabled = await key.$query().patchAndFetch({ status: 'disabled' as ApiKeyStatus });
+    await auditService.record({
+      organizationId,
+      action: 'key.disable',
+      resourceType: 'api_key',
+      resourceId: keyId,
+    });
+    return disabled;
   },
 
   async enable(organizationId: string, keyId: string) {
@@ -326,7 +368,14 @@ export const apiKeyService = {
       }
     }
 
-    return key.$query().patchAndFetch({ status: 'revoked' });
+    const revoked = await key.$query().patchAndFetch({ status: 'revoked' });
+    await auditService.record({
+      organizationId,
+      action: 'key.revoke',
+      resourceType: 'api_key',
+      resourceId: keyId,
+    });
+    return revoked;
   },
 
   /** Authenticate any LiteLLM-issued key mirrored in api_keys (hash lookup). */

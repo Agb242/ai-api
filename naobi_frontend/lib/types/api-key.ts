@@ -1,6 +1,6 @@
 export type ApiKeyStatus = 'active' | 'disabled' | 'revoked' | 'expired';
 
-export type AnalyticsSource = 'litellm' | 'gateway' | null;
+export type AnalyticsSource = 'platform' | 'gateway' | null;
 
 export type ApiKey = {
   id: string;
@@ -16,14 +16,19 @@ export type ApiKey = {
   expires_at?: string | null;
   status: ApiKeyStatus;
   last_used_at?: string | null;
-  litellm_spend?: number | string | null;
-  litellm_synced_at?: string | null;
+  /** Upstream spend — opaque key from API; prefer readPlatformSpend() in UI. */
+  platform_spend?: number | string | null;
+  platform_synced_at?: string | null;
   created_by?: string;
   organization_id?: string;
   created_at?: string;
   updated_at?: string;
+  platform?: Record<string, unknown>;
+  sources?: { local?: boolean; platform?: boolean };
+  /** @internal raw API aliases */
+  litellm_spend?: number | string | null;
+  litellm_synced_at?: string | null;
   litellm?: Record<string, unknown>;
-  sources?: { local?: boolean; litellm?: boolean };
 };
 
 export type ApiKeyCreated = ApiKey & {

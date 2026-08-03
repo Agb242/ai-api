@@ -33,6 +33,13 @@ import { useAuthStore } from '@/lib/stores/auth.store';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
 import type { ApiKeyCreated } from '@/lib/types/api-key';
+import {
+  isUpstreamSource,
+  readPlatformLastActive,
+  readPlatformMaxBudget,
+  readPlatformMeta,
+  readPlatformSpend,
+} from '@/lib/platform-fields';
 
 type ConfirmAction = 'disable' | 'enable' | 'revoke' | 'rotate' | 'resetSpend' | null;
 
@@ -53,8 +60,11 @@ function SourceBadge({
   labelApi: string;
 }) {
   if (!source) return null;
-  const text =
-    source === 'litellm' ? labelPlatform : source === 'gateway' ? labelApi : null;
+  const text = isUpstreamSource(source)
+    ? labelPlatform
+    : source === 'gateway'
+      ? labelApi
+      : null;
   if (!text) return null;
   return (
     <Badge variant="outline" className="text-[10px] font-normal">
@@ -242,19 +252,26 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
   }
 
   const overview = (analytics?.overview || {}) as Record<string, unknown>;
-  const litellm = (analytics?.litellm || key?.litellm || {}) as Record<string, unknown>;
+  const platformMeta = {
+    ...readPlatformMeta(analytics as unknown as Record<string, unknown>),
+    ...readPlatformMeta(key as unknown as Record<string, unknown>),
+  };
   const series = usage?.series || [];
   const maxReq = Math.max(
     1,
     ...series.map((s) => Number(s.api_requests ?? 0)),
   );
 
+  const spendVal = readPlatformSpend(overview);
+  const maxBudgetVal = readPlatformMaxBudget(overview);
+  const lastActiveVal = readPlatformLastActive(overview);
+
   const metricCards: Array<{ label: string; value: string; source?: AnalyticsSource }> = [];
-  if (hasValue(overview.litellm_spend)) {
+  if (spendVal != null) {
     metricCards.push({
       label: t('platformSpend'),
-      value: `${Number(overview.litellm_spend).toFixed(4)} USD`,
-      source: 'litellm',
+      value: `${spendVal.toFixed(4)} USD`,
+      source: 'platform',
     });
   } else if (hasValue(overview.gateway_cost)) {
     metricCards.push({
@@ -286,11 +303,11 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
       source: 'gateway',
     });
   }
-  if (hasValue(overview.litellm_max_budget)) {
+  if (hasValue(maxBudgetVal)) {
     metricCards.push({
       label: t('platformBudget'),
-      value: String(overview.litellm_max_budget),
-      source: 'litellm',
+      value: String(maxBudgetVal),
+      source: 'platform',
     });
   }
 
@@ -324,7 +341,7 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="font-display text-lg font-semibold">{key.name}</h1>
             <Badge variant="outline">{key.status}</Badge>
-            {litellm.blocked === true ? (
+            {platformMeta.blocked === true ? (
               <Badge variant="destructive">{t('platformBlocked')}</Badge>
             ) : null}
           </div>
@@ -380,10 +397,10 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
           ) : null}
           {key.last_used_at ? (
             <InfoCard label={t('lastUsed')} value={new Date(key.last_used_at).toLocaleString()} />
-          ) : hasValue(overview.litellm_last_active) ? (
+          ) : hasValue(lastActiveVal) ? (
             <InfoCard
               label={t('lastUsed')}
-              value={new Date(String(overview.litellm_last_active)).toLocaleString()}
+              value={new Date(String(lastActiveVal)).toLocaleString()}
             />
           ) : null}
           {key.expires_at ? (

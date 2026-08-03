@@ -44,6 +44,7 @@ export const budgetsController = {
       period: body.period,
       ceiling: Number(body.ceiling),
       overageAction: body.overage_action,
+      actorUserId: ctx.state.user!.id,
     });
     ok(ctx, {
       ...publicBudget(budget),

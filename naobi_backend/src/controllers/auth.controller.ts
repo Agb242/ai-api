@@ -9,10 +9,17 @@ import logger from '../config/logger';
 import { normalizeEmail } from '../utils/normalize-email';
 import { momoService } from '../services/momo.service';
 import { litellmAdmin } from '../services/litellm-admin.service';
+import { platformAdminService } from '../services/platform-admin.service';
 
 const googleClient = new OAuth2Client(config.google.clientId);
 
-async function authPayloadForUser(user: User, session: { id: string; expires_at: string | Date }, token: string) {
+async function authPayloadForUser(
+  user: User,
+  session: { id: string; expires_at: string | Date },
+  token: string,
+) {
+  await platformAdminService.activatePendingForUser(user);
+
   const organizations = await organizationService.listForUser(user.id);
   const activeOrganization = organizations.length === 1 ? organizations[0] : null;
   const expiresIn = sessionService.getExpiresInSeconds(new Date(session.expires_at));
@@ -29,6 +36,10 @@ async function authPayloadForUser(user: User, session: { id: string; expires_at:
     full_name: user.full_name,
     avatar_url: user.avatar_url,
     email_verified: user.email_verified,
+    is_platform_admin: await platformAdminService.isActiveAdmin({
+      userId: user.id,
+      email: user.email,
+    }),
   };
 
   const sessionPayload = {
@@ -287,6 +298,8 @@ export const authController = {
         return;
       }
 
+      await platformAdminService.activatePendingForUser(user);
+
       const organizations = await organizationService.listForUser(user.id);
       const activeOrganization = organizations.length === 1 ? organizations[0] : null;
       const expiresIn = sessionService.getExpiresInSeconds(new Date(session.expires_at));
@@ -305,6 +318,10 @@ export const authController = {
         email_verified: user.email_verified,
         created_at: user.created_at,
         updated_at: user.updated_at,
+        is_platform_admin: await platformAdminService.isActiveAdmin({
+          userId: user.id,
+          email: user.email,
+        }),
       };
 
       ctx.status = 200;
