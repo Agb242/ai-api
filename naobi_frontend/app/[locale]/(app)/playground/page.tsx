@@ -25,9 +25,31 @@ import { Switch } from '@/components/ui/switch';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { ChevronDown } from 'lucide-react';
-import 'highlight.js/styles/github-dark.css';
 
-type Msg = { role: 'user' | 'assistant' | 'system'; content: string };
+type Msg = {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  prompt_tokens?: number | null;
+  completion_tokens?: number | null;
+};
+
+function readUsage(json: any): { prompt_tokens: number; completion_tokens: number } | null {
+  if (!json || typeof json !== 'object') return null;
+  const u =
+    json.type === 'usage'
+      ? json
+      : json.usage && typeof json.usage === 'object'
+        ? json.usage
+        : null;
+  if (!u) return null;
+  const prompt_tokens = Number(u.prompt_tokens ?? u.input_tokens ?? 0);
+  const completion_tokens = Number(u.completion_tokens ?? u.output_tokens ?? 0);
+  if (!Number.isFinite(prompt_tokens) && !Number.isFinite(completion_tokens)) return null;
+  return {
+    prompt_tokens: Number.isFinite(prompt_tokens) ? prompt_tokens : 0,
+    completion_tokens: Number.isFinite(completion_tokens) ? completion_tokens : 0,
+  };
+}
 type Modality = 'chat' | 'embeddings' | 'image' | 'audio';
 
 export default function PlaygroundPage() {
@@ -223,8 +245,20 @@ export default function PlaygroundPage() {
 
       if (!streamEnabled) {
         const json = await res.json();
-        const text = json?.choices?.[0]?.message?.content || JSON.stringify(json);
-        setMessages((prev) => [...prev, { role: 'assistant', content: text }]);
+        const text =
+          json?.data?.choices?.[0]?.message?.content ||
+          json?.choices?.[0]?.message?.content ||
+          JSON.stringify(json);
+        const usage = readUsage(json?.data ?? json);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'assistant',
+            content: text,
+            prompt_tokens: usage?.prompt_tokens ?? null,
+            completion_tokens: usage?.completion_tokens ?? null,
+          },
+        ]);
         return;
       }
 
@@ -232,6 +266,8 @@ export default function PlaygroundPage() {
       if (!reader) throw new Error('No stream');
       const decoder = new TextDecoder();
       let assistant = '';
+      let promptTokens: number | null = null;
+      let completionTokens: number | null = null;
       setMessages((prev) => [...prev, { role: 'assistant', content: '' }]);
 
       while (true) {
@@ -245,12 +281,35 @@ export default function PlaygroundPage() {
           if (payload === '[DONE]') continue;
           try {
             const json = JSON.parse(payload);
+            const usage = readUsage(json);
+            if (usage) {
+              promptTokens = usage.prompt_tokens;
+              completionTokens = usage.completion_tokens;
+              setMessages((prev) => {
+                const copy = [...prev];
+                const last = copy[copy.length - 1];
+                if (last?.role === 'assistant') {
+                  copy[copy.length - 1] = {
+                    ...last,
+                    content: assistant || last.content,
+                    prompt_tokens: promptTokens,
+                    completion_tokens: completionTokens,
+                  };
+                }
+                return copy;
+              });
+            }
             const delta = json.choices?.[0]?.delta?.content || '';
             if (delta) {
               assistant += delta;
               setMessages((prev) => {
                 const copy = [...prev];
-                copy[copy.length - 1] = { role: 'assistant', content: assistant };
+                copy[copy.length - 1] = {
+                  role: 'assistant',
+                  content: assistant,
+                  prompt_tokens: promptTokens,
+                  completion_tokens: completionTokens,
+                };
                 return copy;
               });
             }
@@ -258,6 +317,20 @@ export default function PlaygroundPage() {
             /* ignore partial */
           }
         }
+      }
+      if (promptTokens != null || completionTokens != null) {
+        setMessages((prev) => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last?.role === 'assistant') {
+            copy[copy.length - 1] = {
+              ...last,
+              prompt_tokens: promptTokens,
+              completion_tokens: completionTokens,
+            };
+          }
+          return copy;
+        });
       }
     } catch (e: any) {
       if (e?.name === 'AbortError') {
@@ -525,6 +598,8 @@ export default function PlaygroundPage() {
                   content={m.content}
                   streaming={streaming && i === messages.length - 1 && m.role === 'assistant'}
                   userInitials={userInitials}
+                  promptTokens={m.prompt_tokens}
+                  completionTokens={m.completion_tokens}
                 />
               ))
             )}

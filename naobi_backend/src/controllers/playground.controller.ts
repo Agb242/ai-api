@@ -92,30 +92,54 @@ export const playgroundController = {
           pass.write(chunk);
         });
         result.stream.on('end', async () => {
-          pass.end();
           const latencyMs = Date.now() - started;
           const { prompt_tokens, completion_tokens } = parseStreamUsage(collected);
-          const { log, cost } = await gatewayService.finalize({
-            organization,
-            apiKey: key,
-            model,
-            body: payload,
-            responseData: { usage: { prompt_tokens, completion_tokens } },
-            latencyMs,
-            backend: result.backend,
-            filterAction: filterResult.action === 'redact' ? 'redact' : undefined,
-            ruleId: filterResult.rule?.id,
-            status: result.status >= 400 ? 'error' : 'success',
-          });
-          realtimeHub.emitRequest(organization.id, {
-            id: log.id,
-            model: model.model_id,
-            status: log.status,
-            latency_ms: latencyMs,
-            cost,
-            created_at: log.created_at,
-            filter_action: log.filter_action,
-          });
+          try {
+            const { log, cost } = await gatewayService.finalize({
+              organization,
+              apiKey: key,
+              model,
+              body: payload,
+              responseData: { usage: { prompt_tokens, completion_tokens } },
+              latencyMs,
+              backend: result.backend,
+              filterAction: filterResult.action === 'redact' ? 'redact' : undefined,
+              ruleId: filterResult.rule?.id,
+              status: result.status >= 400 ? 'error' : 'success',
+            });
+            pass.write(
+              `data: ${JSON.stringify({
+                type: 'usage',
+                prompt_tokens,
+                completion_tokens,
+                total_tokens: prompt_tokens + completion_tokens,
+                cost,
+              })}\n\n`,
+            );
+            realtimeHub.emitRequest(organization.id, {
+              id: log.id,
+              model: model.model_id,
+              status: log.status,
+              latency_ms: latencyMs,
+              cost,
+              created_at: log.created_at,
+              filter_action: log.filter_action,
+              tokens_input: prompt_tokens,
+              tokens_output: completion_tokens,
+            });
+          } catch (err) {
+            logger.warn('Playground stream finalize failed', { err });
+            pass.write(
+              `data: ${JSON.stringify({
+                type: 'usage',
+                prompt_tokens,
+                completion_tokens,
+                total_tokens: prompt_tokens + completion_tokens,
+              })}\n\n`,
+            );
+          }
+          pass.write('data: [DONE]\n\n');
+          pass.end();
         });
         result.stream.on('error', async () => {
           pass.end();
@@ -145,6 +169,8 @@ export const playgroundController = {
       }
 
       const latencyMs = Date.now() - started;
+      const { extractUsage } = await import('../services/llm/router');
+      const usage = extractUsage(result.data);
       const { log, cost } = await gatewayService.finalize({
         organization,
         apiKey: key,
@@ -166,10 +192,30 @@ export const playgroundController = {
         cost,
         created_at: log.created_at,
         filter_action: log.filter_action,
+        tokens_input: usage.input,
+        tokens_output: usage.output,
       });
 
+      const base =
+        result.data && typeof result.data === 'object'
+          ? (result.data as Record<string, unknown>)
+          : { data: result.data };
+      const existingUsage = (base as any).usage || {};
       ctx.status = 200;
-      ctx.body = result.data;
+      ctx.body = {
+        ...base,
+        usage: {
+          prompt_tokens: Number(
+            existingUsage.prompt_tokens ?? existingUsage.input_tokens ?? usage.input ?? 0,
+          ),
+          completion_tokens: Number(
+            existingUsage.completion_tokens ??
+              existingUsage.output_tokens ??
+              usage.output ??
+              0,
+          ),
+        },
+      };
     } catch (err: any) {
       const code = err.code || 'PROVIDER_ERROR';
       if (code === 'REQUEST_BLOCKED') {

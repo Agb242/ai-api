@@ -132,6 +132,32 @@ export const keyAnalyticsService = {
     const localTotals = localMetrics?.totals;
     const hasLocalRequests = localTotals && localTotals.requests > 0;
 
+    // Prefer LiteLLM daily activity totals for this key (prompt/completion), fallback local gateway
+    let tokens_input: number | undefined;
+    let tokens_output: number | undefined;
+    let tokens_source: 'litellm' | 'gateway' | undefined;
+    try {
+      const usagePayload = await this.usage(organizationId, keyId, 90);
+      let inSum = 0;
+      let outSum = 0;
+      for (const p of usagePayload?.series || []) {
+        inSum += Number((p as any).prompt_tokens || 0);
+        outSum += Number((p as any).completion_tokens || 0);
+      }
+      if (inSum > 0 || outSum > 0) {
+        tokens_input = inSum;
+        tokens_output = outSum;
+        tokens_source = usagePayload?.source === 'gateway' ? 'gateway' : 'litellm';
+      }
+    } catch (err) {
+      logger.warn('analytics usage token sum failed', { keyId, err });
+    }
+    if (tokens_input == null && tokens_output == null && hasLocalRequests) {
+      tokens_input = localTotals!.tokens_input;
+      tokens_output = localTotals!.tokens_output;
+      tokens_source = 'gateway';
+    }
+
     const overview = defined({
       status: key.status,
       last_used_at: key.last_used_at ? String(key.last_used_at) : undefined,
@@ -145,6 +171,9 @@ export const keyAnalyticsService = {
       gateway_cost: hasLocalRequests ? localTotals!.cost : undefined,
       gateway_tokens_input: hasLocalRequests ? localTotals!.tokens_input : undefined,
       gateway_tokens_output: hasLocalRequests ? localTotals!.tokens_output : undefined,
+      tokens_input,
+      tokens_output,
+      tokens_source,
       gateway_avg_latency_ms:
         hasLocalRequests && localTotals!.avg_latency_ms > 0
           ? localTotals!.avg_latency_ms

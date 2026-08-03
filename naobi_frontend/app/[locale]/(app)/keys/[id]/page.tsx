@@ -287,13 +287,28 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
       source: 'gateway',
     });
   }
-  if (hasValue(overview.gateway_tokens_input) || hasValue(overview.gateway_tokens_output)) {
-    const tokens =
-      Number(overview.gateway_tokens_input || 0) + Number(overview.gateway_tokens_output || 0);
+  const tokenIn =
+    overview.tokens_input ?? overview.gateway_tokens_input;
+  const tokenOut =
+    overview.tokens_output ?? overview.gateway_tokens_output;
+  const tokenSource: AnalyticsSource =
+    overview.tokens_source === 'litellm'
+      ? 'platform'
+      : overview.tokens_source === 'gateway' ||
+          hasValue(overview.gateway_tokens_input) ||
+          hasValue(overview.gateway_tokens_output)
+        ? 'gateway'
+        : null;
+  if (hasValue(tokenIn) || hasValue(tokenOut)) {
     metricCards.push({
-      label: t('metricTokens'),
-      value: String(tokens),
-      source: 'gateway',
+      label: t('metricTokensInput'),
+      value: Number(tokenIn || 0).toLocaleString(),
+      source: tokenSource,
+    });
+    metricCards.push({
+      label: t('metricTokensOutput'),
+      value: Number(tokenOut || 0).toLocaleString(),
+      source: tokenSource,
     });
   }
   if (hasValue(overview.gateway_avg_latency_ms)) {
