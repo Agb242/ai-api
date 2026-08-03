@@ -48,13 +48,13 @@ export default function LogsPage() {
                   <td className="px-4 py-3 font-mono text-xs">
                     {new Date(l.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-3">{l.model_id}</td>
-                  <td className="px-4 py-3">{l.status}</td>
+                  <td className="px-4 py-3">{l.model_id || '—'}</td>
+                  <td className="px-4 py-3">{l.status || '—'}</td>
                   <td className="px-4 py-3 font-mono text-xs">
-                    {l.latency_ms != null ? `${l.latency_ms} ms` : '—'}
+                    {l.latency_ms != null ? `${Number(l.latency_ms) || 0} ms` : '—'}
                   </td>
                   <td className="px-4 py-3 font-mono text-xs">
-                    {Number(l.cost || 0).toFixed(4)}
+                    {l.cost != null ? Number(l.cost || 0).toFixed(4) : '—'}
                   </td>
                 </tr>
               ))}

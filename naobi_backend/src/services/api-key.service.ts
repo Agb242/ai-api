@@ -10,6 +10,13 @@ import { catalogService } from './catalog.service';
 import { auditService } from './audit.service';
 import logger from '../config/logger';
 
+/** LiteLLM-style duration string until a future date (e.g. "30d"). */
+function durationUntil(expiresAt: Date): string {
+  const ms = expiresAt.getTime() - Date.now();
+  const days = Math.max(1, Math.ceil(ms / 86400000));
+  return `${days}d`;
+}
+
 function publicKeyFields(k: ApiKey) {
   return {
     id: k.id,
@@ -75,7 +82,10 @@ export const apiKeyService = {
       keyAlias: `${params.name}-${crypto.randomBytes(3).toString('hex')}`.slice(0, 64),
       models,
       maxBudget: params.budgetMax ?? null,
-      duration: params.expiresAt ? undefined : '365d',
+      // No expiry → omit duration (never expires). Custom date → duration until that date.
+      duration: params.expiresAt
+        ? durationUntil(params.expiresAt)
+        : null,
       teamId,
       rpmLimit: params.rpmLimit,
       tpmLimit: params.tpmLimit,
@@ -100,7 +110,8 @@ export const apiKeyService = {
       scope: params.scope || 'organization',
       budget_max: params.budgetMax ?? null,
       budget_consumed: 0,
-      expires_at: params.expiresAt ?? generated.expires ?? null,
+      // Explicit null when user did not set expiry — never take provider default
+      expires_at: params.expiresAt ?? null,
       status: 'active',
       litellm_key_id: generated.token_id || generated.key_name || null,
       litellm_user_id: litellmUserId,

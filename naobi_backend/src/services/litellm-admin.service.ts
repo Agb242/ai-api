@@ -123,7 +123,7 @@ export const litellmAdmin = {
     keyAlias: string;
     models?: string[];
     maxBudget?: number | null;
-    duration?: string;
+    duration?: string | null;
     metadata?: Record<string, unknown>;
     teamId?: string | null;
     rpmLimit?: number | null;
@@ -135,9 +135,12 @@ export const litellmAdmin = {
       key_alias: params.keyAlias.slice(0, 64),
       models: params.models,
       max_budget: params.maxBudget ?? undefined,
-      duration: params.duration || '365d',
       metadata: params.metadata || {},
     };
+    // Omit duration when null/undefined → key does not expire on the provider
+    if (params.duration) {
+      body.duration = params.duration;
+    }
     if (params.teamId) body.team_id = params.teamId;
     if (params.rpmLimit != null) body.rpm_limit = params.rpmLimit;
     if (params.tpmLimit != null) body.tpm_limit = params.tpmLimit;

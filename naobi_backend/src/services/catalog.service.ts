@@ -39,19 +39,47 @@ export const catalogService = {
     allowlist: string[] | null,
   ): T[] {
     if (!allowlist || allowlist.length === 0) return models;
-    const set = new Set(allowlist);
+
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/^[^/]+\//, '') // strip provider prefix
+        .replace(/[^a-z0-9]+/g, '');
+
+    const allowedNorm = allowlist.map((a) => ({ raw: a, norm: normalize(a) }));
+
     return models.filter((m) => {
       const id = String(m.id || m.model_id || '');
-      return set.has(id) || [...set].some((a) => id.includes(a) || a.includes(id));
+      if (!id) return false;
+      const idNorm = normalize(id);
+      return allowedNorm.some(
+        ({ raw, norm }) =>
+          id === raw ||
+          id.includes(raw) ||
+          raw.includes(id) ||
+          (norm.length >= 4 && (idNorm.includes(norm) || norm.includes(idNorm))),
+      );
     });
   },
 
   assertModelsAllowed(requested: string[] | null | undefined, allowlist: string[] | null) {
     if (!allowlist || !requested || requested.length === 0) return;
-    const set = new Set(allowlist);
-    const bad = requested.filter(
-      (m) => !set.has(m) && ![...set].some((a) => m.includes(a) || a.includes(m)),
-    );
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .replace(/^[^/]+\//, '')
+        .replace(/[^a-z0-9]+/g, '');
+    const allowedNorm = allowlist.map((a) => ({ raw: a, norm: normalize(a) }));
+    const bad = requested.filter((m) => {
+      const idNorm = normalize(m);
+      return !allowedNorm.some(
+        ({ raw, norm }) =>
+          m === raw ||
+          m.includes(raw) ||
+          raw.includes(m) ||
+          (norm.length >= 4 && (idNorm.includes(norm) || norm.includes(idNorm))),
+      );
+    });
     if (bad.length) {
       throw Object.assign(new Error('MODEL_NOT_FOUND'), {
         code: 'MODEL_NOT_FOUND',

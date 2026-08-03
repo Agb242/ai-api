@@ -464,19 +464,28 @@ export const metricsController = {
     const allowlist = await catalogService.getAllowedModelsForOrg(orgId);
     catalog.data = catalogService.filterModelList(catalog.data as any[], allowlist);
 
+    const tokensInput = Number((tokensRow as any)?.input || 0);
+    const tokensOutput = Number((tokensRow as any)?.output || 0);
+
     ok(ctx, {
       metrics: {
         requests_today: Number((todayCount as any)?.count || 0),
-        tokens_today:
-          Number((tokensRow as any)?.input || 0) + Number((tokensRow as any)?.output || 0),
-        latency_avg_ms: Math.round(Number((latencyRow as any)?.avg || 0)),
-        cost_month: Number((monthCost as any)?.cost || 0),
-        platform_spend_total: litellmSpendTotal,
+        tokens_input_today: tokensInput,
+        tokens_output_today: tokensOutput,
+        tokens_total_today: tokensInput + tokensOutput,
+        /** @deprecated use tokens_total_today */
+        tokens_today: tokensInput + tokensOutput,
+        latency_avg_ms: Math.round(Number((latencyRow as any)?.avg || 0)) || 0,
+        cost_month: Number((monthCost as any)?.cost || 0) || 0,
+        platform_spend_total: Number(litellmSpendTotal) || 0,
       },
       wallet: wallet
         ? { balance: Number(wallet.balance), status: wallet.status, below_alert: walletService.isBelowAlert(wallet) }
         : null,
-      recent,
+      recent: recent.map((r) => ({
+        ...r,
+        model: (r as any).model_id || (r as any).model || null,
+      })),
       models: catalog.data,
       catalog_status: catalog.catalog_status,
       catalog_source: catalog.catalog_source,

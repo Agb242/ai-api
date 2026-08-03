@@ -109,6 +109,7 @@ export function CreateApiKeyDialog({ open, onOpenChange, onCreated }: Props) {
               value={expiresAt}
               onChange={(e) => setExpiresAt(e.target.value)}
             />
+            <p className="text-[11px] text-muted-foreground">{t('expiresHint')}</p>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ak-budget">{t('budgetOptional')}</Label>

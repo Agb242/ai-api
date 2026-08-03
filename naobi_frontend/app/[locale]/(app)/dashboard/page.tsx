@@ -19,14 +19,29 @@ import type { PlaygroundModel } from '@/lib/types/playground-model';
 
 type LiveRow = {
   id: string;
-  model?: string;
+  model?: string | null;
+  model_id?: string | null;
   status?: string;
-  latency_ms?: number;
-  cost?: number;
+  latency_ms?: number | null;
+  cost?: number | null;
   created_at?: string;
   filter_action?: string | null;
   rule?: string;
 };
+
+function numOrZero(v: unknown): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function formatTokens(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(2)}M`;
+  return n.toLocaleString();
+}
+
+function displayModel(r: { model?: string | null; model_id?: string | null }): string {
+  return r.model || r.model_id || '—';
+}
 
 function StatusBadge({ status, rule, t }: { status?: string; rule?: string; t: (k: string) => string }) {
   if (status === 'blocked') {
@@ -130,12 +145,19 @@ export default function DashboardPage() {
     });
   }, [live, data?.recent]);
 
-  const metrics = data?.metrics || {
-    requests_today: 0,
-    tokens_today: 0,
-    latency_avg_ms: 0,
-    cost_month: 0,
-    platform_spend_total: 0,
+  const metricsRaw = data?.metrics || {};
+  const metrics = {
+    requests_today: numOrZero(metricsRaw.requests_today),
+    tokens_input_today: numOrZero(
+      metricsRaw.tokens_input_today ?? 0,
+    ),
+    tokens_output_today: numOrZero(metricsRaw.tokens_output_today ?? 0),
+    tokens_total_today: numOrZero(
+      metricsRaw.tokens_total_today ?? metricsRaw.tokens_today ?? 0,
+    ),
+    latency_avg_ms: numOrZero(metricsRaw.latency_avg_ms),
+    cost_month: numOrZero(metricsRaw.cost_month),
+    platform_spend_total: numOrZero(metricsRaw.platform_spend_total),
   };
   const catalogModels = (Array.isArray(data?.models) ? data.models : []) as PlaygroundModel[];
   const catalogStatus = data?.catalog_status as 'available' | 'degraded' | undefined;
@@ -147,6 +169,10 @@ export default function DashboardPage() {
       : 0;
 
   const showFirstKey = !!org?.id && !keysLoading && keys.length === 0;
+
+  const costDisplay = numOrZero(
+    metrics.platform_spend_total || metrics.cost_month,
+  ).toFixed(4);
 
   return (
     <div className="flex flex-col gap-5 p-6 md:p-7">
@@ -198,24 +224,20 @@ export default function DashboardPage() {
         keyName={reveal?.name}
       />
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {[
-          { label: t('requestsToday'), value: metrics.requests_today },
-          {
-            label: t('tokens'),
-            value:
-              metrics.tokens_today >= 1_000_000
-                ? `${(metrics.tokens_today / 1_000_000).toFixed(2)}M`
-                : metrics.tokens_today.toLocaleString(),
-          },
+          { label: t('requestsToday'), value: String(metrics.requests_today) },
+          { label: t('tokensInput'), value: formatTokens(metrics.tokens_input_today) },
+          { label: t('tokensOutput'), value: formatTokens(metrics.tokens_output_today) },
+          { label: t('tokensTotal'), value: formatTokens(metrics.tokens_total_today) },
           {
             label: t('latency'),
-            value: `${metrics.latency_avg_ms ?? metrics.latency_median_ms ?? 0}`,
+            value: String(metrics.latency_avg_ms),
             suffix: ' ms',
           },
           {
             label: t('costMonth'),
-            value: `${Number(metrics.platform_spend_total ?? metrics.cost_month ?? 0).toFixed(4)}`,
+            value: costDisplay,
             suffix: ' USD',
           },
         ].map((m) => (
@@ -320,15 +342,15 @@ export default function DashboardPage() {
                     <td className="px-2.5 py-2.5 font-mono text-[12.5px]">
                       {r.created_at ? new Date(r.created_at).toLocaleTimeString() : '—'}
                     </td>
-                    <td className="px-2.5 py-2.5">{r.model || '—'}</td>
+                    <td className="px-2.5 py-2.5">{displayModel(r)}</td>
                     <td className="px-2.5 py-2.5">
                       <StatusBadge status={r.status} rule={r.rule} t={t} />
                     </td>
                     <td className="px-2.5 py-2.5 font-mono text-[12.5px]">
-                      {r.latency_ms != null ? `${r.latency_ms} ms` : '—'}
+                      {r.latency_ms != null ? `${numOrZero(r.latency_ms)} ms` : '—'}
                     </td>
                     <td className="px-2.5 py-2.5 font-mono text-[12.5px]">
-                      {Number(r.cost || 0).toFixed(2)} cr.
+                      {r.cost != null ? numOrZero(r.cost).toFixed(4) : '—'}
                     </td>
                   </tr>
                 ))

@@ -408,7 +408,9 @@ export default function KeyDetailPage({ params }: { params: Promise<{ id: string
               label={t('expiresAt')}
               value={new Date(key.expires_at).toLocaleDateString()}
             />
-          ) : null}
+          ) : (
+            <InfoCard label={t('expiresAt')} value={t('neverExpires')} />
+          )}
           {key.budget_max != null ? (
             <InfoCard
               label={t('budget')}

@@ -8,14 +8,13 @@ import {
   KeyRound,
   Shield,
   Boxes,
-  Wallet,
   Users,
   ScrollText,
   X,
-  CreditCard,
   MessageSquare,
   FileSearch,
   ClipboardCheck,
+  // CreditCard, Wallet — temporarily unused (Billing/Wallet hidden)
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
@@ -39,8 +38,9 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { icon: Shield, labelKey: 'filters' as const, href: '/filters' },
     { icon: ClipboardCheck, labelKey: 'compliance' as const, href: '/compliance' },
     { icon: Boxes, labelKey: 'models' as const, href: '/models' },
-    { icon: CreditCard, labelKey: 'billing' as const, href: '/billing' },
-    { icon: Wallet, labelKey: 'wallet' as const, href: '/wallet' },
+    // Temporarily hidden until MoMo/Wallet demo-ready (see audit_v2.md)
+    // { icon: CreditCard, labelKey: 'billing' as const, href: '/billing' },
+    // { icon: Wallet, labelKey: 'wallet' as const, href: '/wallet' },
     { icon: Users, labelKey: 'team' as const, href: '/members' },
   ];
 
