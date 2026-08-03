@@ -13,7 +13,7 @@ import {
   X,
   MessageSquare,
   FileSearch,
-  ClipboardCheck,
+  // ClipboardCheck — Compliance hidden (audit_v3)
   // CreditCard, Wallet — temporarily unused (Billing/Wallet hidden)
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -36,7 +36,8 @@ export default function Sidebar({ onClose }: SidebarProps) {
     { icon: FileSearch, labelKey: 'audit' as const, href: '/audit' },
     { icon: MessageSquare, labelKey: 'playground' as const, href: '/playground' },
     { icon: Shield, labelKey: 'filters' as const, href: '/filters' },
-    { icon: ClipboardCheck, labelKey: 'compliance' as const, href: '/compliance' },
+    // Temporarily hidden — static checklist only (see audit_v3.md)
+    // { icon: ClipboardCheck, labelKey: 'compliance' as const, href: '/compliance' },
     { icon: Boxes, labelKey: 'models' as const, href: '/models' },
     // Temporarily hidden until MoMo/Wallet demo-ready (see audit_v2.md)
     // { icon: CreditCard, labelKey: 'billing' as const, href: '/billing' },

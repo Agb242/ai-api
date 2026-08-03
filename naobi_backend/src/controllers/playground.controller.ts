@@ -73,7 +73,9 @@ export const playgroundController = {
         return fail(ctx, 'KEY_PLAINTEXT_UNAVAILABLE', 400);
       }
 
-      const result = await llmRouter.forward(payload as any, model, { bearerKey: virtualKey });
+      const { parseStreamUsage, withStreamUsageOptions } = await import('../services/llm/router');
+      const outbound = withStreamUsageOptions(payload as Record<string, unknown>);
+      const result = await llmRouter.forward(outbound as any, model, { bearerKey: virtualKey });
 
       if (result.stream) {
         ctx.status = result.status;
@@ -92,18 +94,7 @@ export const playgroundController = {
         result.stream.on('end', async () => {
           pass.end();
           const latencyMs = Date.now() - started;
-          let prompt_tokens = 0;
-          let completion_tokens = 0;
-          const usageMatch = collected.match(/"usage"\s*:\s*\{[^}]+\}/);
-          if (usageMatch) {
-            try {
-              const usage = JSON.parse(`{${usageMatch[0]}}`).usage;
-              prompt_tokens = usage.prompt_tokens || 0;
-              completion_tokens = usage.completion_tokens || 0;
-            } catch {
-              /* ignore */
-            }
-          }
+          const { prompt_tokens, completion_tokens } = parseStreamUsage(collected);
           const { log, cost } = await gatewayService.finalize({
             organization,
             apiKey: key,

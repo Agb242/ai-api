@@ -220,11 +220,19 @@
     "activate": "Activate",
     "deactivate": "Deactivate",
     "empty": "No rules yet. Protect sensitive data before it reaches providers.",
+    "adminOnly": "Only owners and admins can manage filters.",
+    "loadFailed": "Could not load filters (permissions or server).",
+    "created": "Rule created",
+    "deleted": "Rule deleted",
+    "deleteConfirm": "Delete this rule?",
     "guardrailTitle": "Enterprise guardrail",
     "guardrailHint": "Enterprise preset (best-effort) after local filters.",
     "guardrailOn": "Enabled",
     "guardrailOff": "Disabled",
-    "guardrailToggle": "Toggle guardrail"
+    "guardrailToggle": "Toggle guardrail",
+    "guardrailConfigured": "Configured on platform",
+    "guardrailNotConfigured": "Not yet registered on platform",
+    "guardrailRemote": "{n} remote guardrail(s)"
   },
   "wallet": {
     "title": "Wallet",

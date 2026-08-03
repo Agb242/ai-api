@@ -464,20 +464,37 @@ export const metricsController = {
     const allowlist = await catalogService.getAllowedModelsForOrg(orgId);
     catalog.data = catalogService.filterModelList(catalog.data as any[], allowlist);
 
-    const tokensInput = Number((tokensRow as any)?.input || 0);
-    const tokensOutput = Number((tokensRow as any)?.output || 0);
+    const localInput = Number((tokensRow as any)?.input || 0);
+    const localOutput = Number((tokensRow as any)?.output || 0);
+    const localRequests = Number((todayCount as any)?.count || 0);
+
+    // Hybrid: KPI tokens/requests from LiteLLM daily activity when available
+    const { fetchOrgLitellmTodayMetrics } = await import('../services/org-metrics.service');
+    const upstream = await fetchOrgLitellmTodayMetrics(orgId);
+    const useUpstream = !!upstream && (upstream.api_requests > 0 || upstream.total_tokens > 0
+      || upstream.prompt_tokens > 0 || upstream.completion_tokens > 0);
+
+    const tokensInput = useUpstream ? upstream!.prompt_tokens : localInput;
+    const tokensOutput = useUpstream ? upstream!.completion_tokens : localOutput;
+    const tokensTotal = useUpstream
+      ? upstream!.total_tokens || tokensInput + tokensOutput
+      : localInput + localOutput;
+    const requestsToday = useUpstream && upstream!.api_requests > 0
+      ? upstream!.api_requests
+      : localRequests;
 
     ok(ctx, {
       metrics: {
-        requests_today: Number((todayCount as any)?.count || 0),
+        requests_today: requestsToday,
         tokens_input_today: tokensInput,
         tokens_output_today: tokensOutput,
-        tokens_total_today: tokensInput + tokensOutput,
+        tokens_total_today: tokensTotal,
         /** @deprecated use tokens_total_today */
-        tokens_today: tokensInput + tokensOutput,
+        tokens_today: tokensTotal,
         latency_avg_ms: Math.round(Number((latencyRow as any)?.avg || 0)) || 0,
         cost_month: Number((monthCost as any)?.cost || 0) || 0,
         platform_spend_total: Number(litellmSpendTotal) || 0,
+        metrics_source: useUpstream ? upstream!.source : 'gateway',
       },
       wallet: wallet
         ? { balance: Number(wallet.balance), status: wallet.status, below_alert: walletService.isBelowAlert(wallet) }

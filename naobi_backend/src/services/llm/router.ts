@@ -298,6 +298,74 @@ export function extractUsage(data: unknown): { input: number; output: number } {
   };
 }
 
+/** Parse usage from SSE / chat stream body (OpenAI + LiteLLM field names). */
+export function parseStreamUsage(collected: string): {
+  prompt_tokens: number;
+  completion_tokens: number;
+} {
+  let prompt_tokens = 0;
+  let completion_tokens = 0;
+  if (!collected) return { prompt_tokens, completion_tokens };
+
+  // Prefer last usage object (stream_options.include_usage puts it on the final chunk)
+  const idx = collected.lastIndexOf('"usage"');
+  if (idx >= 0) {
+    const slice = collected.slice(idx);
+    const brace = slice.indexOf('{');
+    if (brace >= 0) {
+      let depth = 0;
+      let end = -1;
+      for (let i = brace; i < slice.length; i++) {
+        const c = slice[i];
+        if (c === '{') depth++;
+        else if (c === '}') {
+          depth--;
+          if (depth === 0) {
+            end = i;
+            break;
+          }
+        }
+      }
+      if (end > brace) {
+        try {
+          const usage = JSON.parse(slice.slice(brace, end + 1));
+          prompt_tokens = Number(usage?.prompt_tokens || usage?.input_tokens || 0);
+          completion_tokens = Number(
+            usage?.completion_tokens || usage?.output_tokens || 0,
+          );
+          return { prompt_tokens, completion_tokens };
+        } catch {
+          /* fall through */
+        }
+      }
+    }
+  }
+
+  const loose = collected.match(
+    /"prompt_tokens"\s*:\s*(\d+)[\s\S]*?"completion_tokens"\s*:\s*(\d+)/,
+  );
+  if (loose) {
+    prompt_tokens = Number(loose[1] || 0);
+    completion_tokens = Number(loose[2] || 0);
+  }
+  return { prompt_tokens, completion_tokens };
+}
+
+/** Ensure streaming responses include a final usage chunk when supported. */
+export function withStreamUsageOptions(
+  body: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!body?.stream) return body;
+  const existing =
+    body.stream_options && typeof body.stream_options === 'object'
+      ? (body.stream_options as Record<string, unknown>)
+      : {};
+  return {
+    ...body,
+    stream_options: { ...existing, include_usage: true },
+  };
+}
+
 export function isAxiosNetworkError(err: unknown): boolean {
   return err instanceof AxiosError && !err.response;
 }

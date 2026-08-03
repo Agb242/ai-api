@@ -220,11 +220,19 @@
     "activate": "Activer",
     "deactivate": "Désactiver",
     "empty": "Aucune règle. Protégez les données sensibles avant l'envoi aux fournisseurs.",
+    "adminOnly": "Seuls les owners et admins peuvent gérer les filtres.",
+    "loadFailed": "Impossible de charger les filtres (droits ou serveur).",
+    "created": "Règle créée",
+    "deleted": "Règle supprimée",
+    "deleteConfirm": "Supprimer cette règle ?",
     "guardrailTitle": "Guardrail entreprise",
     "guardrailHint": "Preset entreprise (best-effort) après les filtres locaux.",
     "guardrailOn": "Activé",
     "guardrailOff": "Désactivé",
-    "guardrailToggle": "Basculer le guardrail"
+    "guardrailToggle": "Basculer le guardrail",
+    "guardrailConfigured": "Configuré côté plateforme",
+    "guardrailNotConfigured": "Pas encore enregistré côté plateforme",
+    "guardrailRemote": "{n} guardrail(s) distants"
   },
   "wallet": {
     "title": "Wallet",

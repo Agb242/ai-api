@@ -261,7 +261,9 @@ export default function DashboardPage() {
             <ul className="space-y-2 text-sm">
               {spendTags.tags.slice(0, 8).map((row: any, i: number) => (
                 <li key={i} className="flex justify-between gap-2 font-mono text-xs">
-                  <span className="truncate">{row.tag || row.name || JSON.stringify(row).slice(0, 40)}</span>
+                  <span className="truncate">
+                    {String(row.tag || row.name || '—').replace(/litellm/gi, 'platform')}
+                  </span>
                   <span>{Number(row.spend ?? row.cost ?? 0).toFixed(4)}</span>
                 </li>
               ))}

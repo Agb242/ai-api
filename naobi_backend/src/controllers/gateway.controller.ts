@@ -194,10 +194,17 @@ export const gatewayController = {
         // LiteLLM OpenAI-compatible end-user field often mirrored via header
         extraHeaders['x-litellm-end-user'] = endUserId;
       }
+      const { parseStreamUsage, withStreamUsageOptions } = await import('../services/llm/router');
+      const outboundBody = multipart
+        ? undefined
+        : withStreamUsageOptions({
+            ...payload,
+            ...(endUserId && !payload.user ? { user: endUserId } : {}),
+          });
       const result = await llmRouter.proxy({
         method: ctx.method,
         path: classified.upstreamPath,
-        body: multipart ? undefined : { ...payload, ...(endUserId && !payload.user ? { user: endUserId } : {}) },
+        body: outboundBody,
         multipart: multipart || undefined,
         bearerKey: ctx.state.rawApiKey || undefined,
         stream: wantsStream,
@@ -222,18 +229,7 @@ export const gatewayController = {
         result.stream.on('end', async () => {
           pass.end();
           const latencyMs = Date.now() - started;
-          let prompt_tokens = 0;
-          let completion_tokens = 0;
-          const usageMatch = collected.match(/"usage"\s*:\s*\{[^}]+\}/);
-          if (usageMatch) {
-            try {
-              const usage = JSON.parse(`{${usageMatch[0]}}`).usage;
-              prompt_tokens = usage.prompt_tokens || 0;
-              completion_tokens = usage.completion_tokens || 0;
-            } catch {
-              /* ignore */
-            }
-          }
+          const { prompt_tokens, completion_tokens } = parseStreamUsage(collected);
           const { log, cost } = await gatewayService.finalize({
             organization,
             apiKey,

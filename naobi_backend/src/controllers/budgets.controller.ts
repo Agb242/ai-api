@@ -68,7 +68,9 @@ export const analyticsController = {
         ? ctx.query.to
         : new Date().toISOString().slice(0, 10);
 
-    const tags = await litellmAdmin.spendTags({ startDate: from, endDate: to });
+    const rawTags = await litellmAdmin.spendTags({ startDate: from, endDate: to });
+    const { sanitizeSpendTags } = await import('../services/org-metrics.service');
+    const tags = sanitizeSpendTags(rawTags || []);
     const org = await Organization.query().findById(ctx.state.orgId!);
     let teamActivity: Record<string, unknown> | null = null;
     if (org?.litellm_team_id) {
@@ -82,9 +84,9 @@ export const analyticsController = {
     ok(ctx, {
       from,
       to,
-      tags: tags || [],
+      tags,
       team_activity: teamActivity,
-      empty: !tags || tags.length === 0,
+      empty: tags.length === 0,
     });
   },
 
