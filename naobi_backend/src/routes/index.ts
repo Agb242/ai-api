@@ -3,6 +3,7 @@ import authRoutes from './auth.routes';
 import dashboardRoutes from './dashboard.routes';
 import billingRoutes from './billing.routes';
 import playgroundRoutes from './playground.routes';
+import agentRoutes from './agent.routes';
 import gatewayRoutes from './gateway.routes';
 import passthroughRoutes from './passthrough.routes';
 
@@ -17,6 +18,8 @@ api.use(billingRoutes.routes());
 api.use(billingRoutes.allowedMethods());
 api.use(playgroundRoutes.routes());
 api.use(playgroundRoutes.allowedMethods());
+api.use(agentRoutes.routes());
+api.use(agentRoutes.allowedMethods());
 
 router.use(api.routes());
 router.use(api.allowedMethods());

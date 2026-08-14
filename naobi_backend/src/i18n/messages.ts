@@ -49,6 +49,8 @@ const messages: Record<Locale, Record<string, string>> = {
     LITELLM_NOT_CONFIGURED: 'LiteLLM Proxy non configuré sur le serveur.',
     LITELLM_UNAVAILABLE: 'LiteLLM Proxy indisponible. Réessayez plus tard.',
     TOPUP_DISABLED: 'Recharge stub désactivée. Achetez un pack Mobile Money.',
+    AGENT_TEMPLATE_NOT_FOUND: 'Métier introuvable ou indisponible.',
+    AGENT_NOT_FOUND: 'Agent introuvable.',
   },
   en: {
     INVALID_EMAIL: 'Invalid email',
@@ -97,6 +99,8 @@ const messages: Record<Locale, Record<string, string>> = {
     LITELLM_NOT_CONFIGURED: 'LiteLLM Proxy is not configured on the server.',
     LITELLM_UNAVAILABLE: 'LiteLLM Proxy unavailable. Try again later.',
     TOPUP_DISABLED: 'Stub top-up disabled. Buy a Mobile Money pack.',
+    AGENT_TEMPLATE_NOT_FOUND: 'Business template not found or unavailable.',
+    AGENT_NOT_FOUND: 'Agent not found.',
   },
 };
 

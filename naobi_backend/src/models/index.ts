@@ -14,3 +14,5 @@ export { Invitation } from './Invitation';
 export { Budget } from './Budget';
 export { Pack } from './Pack';
 export { MomoTransaction } from './MomoTransaction';
+export { AgentTemplate } from './AgentTemplate';
+export { Agent } from './Agent';
