@@ -1,5 +1,6 @@
 import { Context } from 'koa';
 import { agentService } from '../services/agent.service';
+import { mcpRegistryService } from '../services/mcp-registry.service';
 import { t } from '../i18n/messages';
 import logger from '../config/logger';
 
@@ -26,7 +27,7 @@ export const agentController = {
         icon: tpl.icon,
         default_name: tpl.default_name,
         description: tpl.description,
-        tone_default: tpl.tone_default,
+        system_prompt: tpl.system_prompt,
         disclaimer: tpl.disclaimer ?? null,
         starters: tpl.starters ?? [],
       })),
@@ -42,11 +43,12 @@ export const agentController = {
     const body = (ctx.request.body || {}) as {
       template_id?: string;
       name?: string;
-      tone?: string;
-      language?: string;
+      system_prompt?: string;
       model_id?: string;
+      temperature?: number;
+      max_tokens?: number;
     };
-    if (!body.template_id || !body.model_id) {
+    if (!body.name?.trim() || !body.system_prompt?.trim() || !body.model_id) {
       return fail(ctx, 'MISSING_FIELDS', 400);
     }
 
@@ -54,17 +56,19 @@ export const agentController = {
       const agent = await agentService.create({
         organizationId: ctx.state.orgId!,
         userId: ctx.state.user!.id,
-        templateId: body.template_id,
+        templateId: body.template_id || null,
         name: body.name,
-        tone: body.tone,
-        language: body.language,
+        systemPrompt: body.system_prompt,
         modelId: body.model_id,
+        temperature: body.temperature,
+        maxTokens: body.max_tokens,
       });
       ok(ctx, agent, 201);
     } catch (err: any) {
       const code = err.code || 'PROVIDER_ERROR';
       if (code === 'AGENT_TEMPLATE_NOT_FOUND') return fail(ctx, code, 404);
       if (code === 'MODEL_NOT_FOUND') return fail(ctx, code, 400);
+      if (code === 'MISSING_FIELDS') return fail(ctx, code, 400);
       logger.error('Agent create error', { code, message: err.message });
       fail(ctx, 'PROVIDER_ERROR', 502);
     }
@@ -74,6 +78,32 @@ export const agentController = {
     const removed = await agentService.remove(ctx.state.orgId!, ctx.state.user!.id, ctx.params.id);
     if (!removed) return fail(ctx, 'AGENT_NOT_FOUND', 404);
     ok(ctx, { removed: true });
+  },
+
+  async listMcpServers(ctx: Context) {
+    const servers = await mcpRegistryService.listForAgent(ctx.state.orgId!, ctx.params.id);
+    ok(ctx, servers);
+  },
+
+  async attachMcpServer(ctx: Context) {
+    const body = (ctx.request.body || {}) as { mcp_server_id?: string };
+    if (!body.mcp_server_id) return fail(ctx, 'MISSING_FIELDS', 400);
+    try {
+      const server = await mcpRegistryService.attachToAgent(
+        ctx.state.orgId!,
+        ctx.params.id,
+        body.mcp_server_id,
+      );
+      ok(ctx, server, 201);
+    } catch (err: any) {
+      const code = err.code || 'MCP_SERVER_NOT_FOUND';
+      fail(ctx, code, code === 'MCP_SERVER_NOT_FOUND' ? 404 : 502);
+    }
+  },
+
+  async detachMcpServer(ctx: Context) {
+    await mcpRegistryService.detachFromAgent(ctx.params.id, ctx.params.mcpServerId);
+    ok(ctx, { detached: true });
   },
 
   async chatCompletions(ctx: Context) {

@@ -5,7 +5,7 @@ export type AgentTemplate = {
   icon: string;
   default_name: string;
   description: string;
-  tone_default: string;
+  system_prompt: string;
   disclaimer: string | null;
   starters: string[];
 };
@@ -13,23 +13,25 @@ export type AgentTemplate = {
 export type Agent = {
   id: string;
   template_id: string | null;
-  metier: string;
+  metier: string | null;
   icon: string;
   name: string;
   model_id: string;
-  tone: string;
-  language: string;
+  temperature: number;
+  max_tokens: number;
+  system_prompt: string;
   disclaimer: string | null;
   starters: string[];
   created_at: string;
 };
 
 export type CreateAgentPayload = {
-  template_id: string;
-  name?: string;
-  tone?: string;
-  language?: string;
+  name: string;
+  system_prompt: string;
   model_id: string;
+  temperature?: number;
+  max_tokens?: number;
+  template_id?: string | null;
 };
 
 export type AgentChatResult = {

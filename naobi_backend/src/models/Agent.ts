@@ -7,12 +7,12 @@ export class Agent extends BaseModel {
   organization_id!: string;
   created_by!: string;
   template_id?: string | null;
-  metier!: string;
+  metier?: string | null;
   icon!: string;
   name!: string;
   model_id!: string;
-  tone!: string;
-  language!: string;
+  temperature!: string | number;
+  max_tokens!: number;
   system_prompt!: string;
   disclaimer?: string | null;
   starters?: string[];

@@ -7,18 +7,16 @@ import { toast } from 'sonner';
 import { agentsApi } from '@/lib/api/agents.api';
 import { keysApi } from '@/lib/api/keys.api';
 import { modelsApi } from '@/lib/api/models.api';
-import type { Agent, AgentTemplate } from '@/lib/types/agent';
+import type { Agent } from '@/lib/types/agent';
 import type { ApiKey } from '@/lib/types/api-key';
 import type { PlaygroundModel } from '@/lib/types/playground-model';
-import { AgentTemplateCard } from '@/components/agents/AgentTemplateCard';
-import { AgentCard } from '@/components/agents/AgentCard';
-import { CreateAgentDialog } from '@/components/agents/CreateAgentDialog';
-import { ApiKeySelect } from '@/components/playground/ApiKeySelect';
+import { CreateAgentPanel } from '@/components/agents/CreateAgentPanel';
+import { AgentSessionList } from '@/components/agents/AgentSessionList';
+import { AgentInspector } from '@/components/agents/AgentInspector';
 import { ChatMessage } from '@/components/playground/ChatMessage';
 import { ChatComposer } from '@/components/playground/ChatComposer';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
-import { Button } from '@/components/ui/button';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -45,8 +43,7 @@ export default function AgentsPage() {
   const user = useAuthStore((s) => s.user);
   const qc = useQueryClient();
 
-  const [pendingTemplate, setPendingTemplate] = useState<AgentTemplate | null>(null);
-  const [activeAgent, setActiveAgent] = useState<Agent | null>(null);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Agent | null>(null);
   const [apiKeyId, setApiKeyId] = useState('');
   const [createKeyOpen, setCreateKeyOpen] = useState(false);
@@ -103,6 +100,7 @@ export default function AgentsPage() {
     })) as PlaygroundModel[];
   }, [modelsPayload]);
 
+  const activeAgent = agents.find((a) => a.id === activeAgentId) || null;
   const selectedKey = keys.find((k) => k.id === apiKeyId);
 
   const userInitials = user?.full_name
@@ -119,16 +117,17 @@ export default function AgentsPage() {
       const res = await agentsApi.remove(id);
       if (!res.success) throw new Error(res.error?.message);
     },
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       toast.success(t('deleted'));
       qc.invalidateQueries({ queryKey: ['agents'] });
       setDeleteTarget(null);
+      if (activeAgentId === id) setActiveAgentId(null);
     },
     onError: (e: Error) => toast.error(e.message),
   });
 
   function openAgent(agent: Agent) {
-    setActiveAgent(agent);
+    setActiveAgentId(agent.id);
     setMessages([]);
     setInput('');
     if (!apiKeyId) {
@@ -172,35 +171,18 @@ export default function AgentsPage() {
     }
   }
 
-  if (activeAgent) {
-    return (
-      <div className="flex h-[calc(100vh-3.5rem-64px)] flex-col gap-4 p-6 md:p-7">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <h1 className="font-display text-lg font-semibold">
-              {activeAgent.icon} {activeAgent.name}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">{activeAgent.metier}</p>
-          </div>
-          <Button variant="outline" size="sm" onClick={() => setActiveAgent(null)}>
-            {t('backToAgents')}
-          </Button>
-        </div>
+  return (
+    <div className="flex h-[calc(100vh-3.5rem-64px)]">
+      <AgentSessionList
+        agents={agents}
+        activeAgentId={activeAgentId}
+        onSelect={openAgent}
+        onDelete={setDeleteTarget}
+        onNewAgent={() => setActiveAgentId(null)}
+      />
 
-        {activeAgent.disclaimer ? (
-          <p className="rounded-lg border border-[hsl(var(--warning))]/40 bg-[hsl(var(--warning))]/10 p-3 text-xs text-foreground">
-            ⚠️ {activeAgent.disclaimer}
-          </p>
-        ) : null}
-
-        <ApiKeySelect
-          keys={keys}
-          value={apiKeyId}
-          onChange={setApiKeyId}
-          onCreateClick={() => setCreateKeyOpen(true)}
-        />
-
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {activeAgent ? (
+        <div className="flex min-w-0 flex-1 flex-col gap-3 p-4 md:p-5">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
             {messages.length === 0 ? (
               <div className="space-y-2">
@@ -234,67 +216,38 @@ export default function AgentsPage() {
             disabled={!apiKeyId || selectedKey?.status !== 'active'}
           />
         </div>
-
-        <CreateApiKeyDialog
-          open={createKeyOpen}
-          onOpenChange={setCreateKeyOpen}
-          onCreated={(created) => {
-            setReveal(created);
-            setApiKeyId(created.id);
-            qc.invalidateQueries({ queryKey: ['keys'] });
-          }}
-        />
-        <RevealApiKeyDialog
-          open={!!reveal}
-          onOpenChange={(o) => {
-            if (!o) setReveal(null);
-          }}
-          plaintext={reveal?.key ?? null}
-          keyName={reveal?.name}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-6 p-6 md:p-7">
-      <div>
-        <h1 className="font-display text-lg font-semibold">{t('title')}</h1>
-        <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
-      </div>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">{t('yourAgents')}</h2>
-        {agents.length === 0 ? (
-          <p className="text-sm text-muted-foreground">{t('noAgents')}</p>
-        ) : (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {agents.map((agent) => (
-              <AgentCard
-                key={agent.id}
-                agent={agent}
-                onOpen={openAgent}
-                onDelete={setDeleteTarget}
-              />
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-sm font-semibold text-foreground">{t('library')}</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {templates.map((template) => (
-            <AgentTemplateCard key={template.id} template={template} onSelect={setPendingTemplate} />
-          ))}
+      ) : (
+        <div className="min-w-0 flex-1 overflow-y-auto">
+          <CreateAgentPanel templates={templates} models={models} onCreated={openAgent} />
         </div>
-      </section>
+      )}
 
-      <CreateAgentDialog
-        template={pendingTemplate}
-        models={models}
-        onOpenChange={(open) => !open && setPendingTemplate(null)}
-        onCreated={openAgent}
+      {activeAgent ? (
+        <AgentInspector
+          agent={activeAgent}
+          keys={keys}
+          apiKeyId={apiKeyId}
+          onApiKeyChange={setApiKeyId}
+          onCreateKeyClick={() => setCreateKeyOpen(true)}
+        />
+      ) : null}
+
+      <CreateApiKeyDialog
+        open={createKeyOpen}
+        onOpenChange={setCreateKeyOpen}
+        onCreated={(created) => {
+          setReveal(created);
+          setApiKeyId(created.id);
+          qc.invalidateQueries({ queryKey: ['keys'] });
+        }}
+      />
+      <RevealApiKeyDialog
+        open={!!reveal}
+        onOpenChange={(o) => {
+          if (!o) setReveal(null);
+        }}
+        plaintext={reveal?.key ?? null}
+        keyName={reveal?.name}
       />
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(o) => !o && setDeleteTarget(null)}>

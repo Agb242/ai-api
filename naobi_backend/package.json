@@ -4,7 +4,7 @@
   "description": "NexusIA — LLM gateway API (Koa)",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "nodemon --exec ts-node src/index.ts",
+    "dev": "nodemon --exec ts-node --transpile-only src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
     "worker": "node dist/worker.js",
@@ -26,7 +26,9 @@
   "dependencies": {
     "@koa/cors": "^5.0.0",
     "@koa/router": "^13.1.0",
+    "@modelcontextprotocol/sdk": "^1.30.0",
     "@socket.io/redis-adapter": "^8.3.0",
+    "@types/pdfkit": "^0.17.6",
     "axios": "^1.13.2",
     "bullmq": "^5.80.8",
     "dotenv": "^16.4.5",
@@ -40,6 +42,7 @@
     "koa2-swagger-ui": "^5.12.0",
     "nodemailer": "^8.0.7",
     "objection": "^3.1.4",
+    "pdfkit": "^0.19.1",
     "pg": "^8.12.0",
     "slugify": "^1.6.6",
     "socket.io": "^4.8.3",

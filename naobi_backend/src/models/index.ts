@@ -16,3 +16,5 @@ export { Pack } from './Pack';
 export { MomoTransaction } from './MomoTransaction';
 export { AgentTemplate } from './AgentTemplate';
 export { Agent } from './Agent';
+export { McpServer } from './McpServer';
+export { GeneratedFile } from './GeneratedFile';

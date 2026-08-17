@@ -6,29 +6,30 @@ import { catalogService } from './catalog.service';
 import { gatewayService } from './gateway.service';
 import { llmRouter, extractUsage } from './llm/router';
 import { auditService } from './audit.service';
+import { mcpRegistryService } from './mcp-registry.service';
+import { nativeToolsService } from './native-tools.service';
 
-/** Compose the final system prompt: template base + tone/language + disclaimer reminder. */
-function buildSystemPrompt(
-  basePrompt: string,
-  tone: string,
-  language: string,
-  disclaimer?: string | null,
-): string {
-  let prompt = `${basePrompt}\n\nTon à adopter : ${tone}. Réponds toujours en ${language}, sauf si l'utilisateur écrit clairement dans une autre langue.`;
-  if (disclaimer) prompt += `\n\nRappel important à respecter strictement : ${disclaimer}`;
-  return prompt;
+/** Safety cap on the model↔tool round trip so a misbehaving tool can't loop forever. */
+const MAX_TOOL_ROUNDS = 4;
+
+type ChatMessage = { role: string; content?: string | null; [key: string]: unknown };
+
+function clamp(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min;
+  return Math.min(max, Math.max(min, n));
 }
 
 function publicAgentFields(agent: Agent) {
   return {
     id: agent.id,
     template_id: agent.template_id ?? null,
-    metier: agent.metier,
+    metier: agent.metier ?? null,
     icon: agent.icon,
     name: agent.name,
     model_id: agent.model_id,
-    tone: agent.tone,
-    language: agent.language,
+    temperature: Number(agent.temperature),
+    max_tokens: agent.max_tokens,
+    system_prompt: agent.system_prompt,
     disclaimer: agent.disclaimer ?? null,
     starters: agent.starters ?? [],
     created_at: agent.created_at,
@@ -50,45 +51,59 @@ export const agentService = {
     return agents.map(publicAgentFields);
   },
 
+  /**
+   * Free-form agent creation — the direct LiteLLM/OpenAI chat-completions config surface
+   * (system prompt, model, temperature, max_tokens), no mandatory métier template. A
+   * `templateId` may still be passed to carry over its métier/icon/disclaimer/starters as
+   * optional flavor metadata (the frontend uses it as a prefill, not a gate).
+   */
   async create(params: {
     organizationId: string;
     userId: string;
-    templateId: string;
-    name?: string;
-    tone?: string;
-    language?: string;
+    name: string;
+    systemPrompt: string;
     modelId: string;
+    temperature?: number;
+    maxTokens?: number;
+    templateId?: string | null;
   }) {
-    const template = await AgentTemplate.query().findOne({
-      id: params.templateId,
-      active: true,
-    });
-    if (!template) {
-      throw Object.assign(new Error('AGENT_TEMPLATE_NOT_FOUND'), {
-        code: 'AGENT_TEMPLATE_NOT_FOUND',
-      });
-    }
-
     const allowlist = await catalogService.getAllowedModelsForOrg(params.organizationId);
     catalogService.assertModelsAllowed([params.modelId], allowlist);
 
-    const tone = (params.tone || template.tone_default || 'amical').trim();
-    const language = (params.language || 'français').trim();
-    const name = (params.name || template.default_name).trim().slice(0, 60) || template.default_name;
+    let template: AgentTemplate | undefined;
+    if (params.templateId) {
+      template =
+        (await AgentTemplate.query().findOne({ id: params.templateId, active: true })) ||
+        undefined;
+      if (!template) {
+        throw Object.assign(new Error('AGENT_TEMPLATE_NOT_FOUND'), {
+          code: 'AGENT_TEMPLATE_NOT_FOUND',
+        });
+      }
+    }
+
+    const name = params.name.trim().slice(0, 60);
+    if (!name) throw Object.assign(new Error('MISSING_FIELDS'), { code: 'MISSING_FIELDS' });
+    const systemPrompt = params.systemPrompt.trim();
+    if (!systemPrompt) throw Object.assign(new Error('MISSING_FIELDS'), { code: 'MISSING_FIELDS' });
+
+    const temperature = clamp(params.temperature ?? 0.7, 0, 2);
+    const maxTokens = clamp(Math.round(params.maxTokens ?? 1024), 1, 32000);
 
     const agent = await Agent.query().insert({
       organization_id: params.organizationId,
       created_by: params.userId,
-      template_id: template.id,
-      metier: template.metier,
-      icon: template.icon,
+      template_id: template?.id ?? null,
+      metier: template?.metier ?? null,
+      icon: template?.icon ?? '🤖',
       name,
       model_id: params.modelId,
-      tone,
-      language,
-      system_prompt: buildSystemPrompt(template.system_prompt, tone, language, template.disclaimer),
-      disclaimer: template.disclaimer ?? null,
-      starters: template.starters ?? [],
+      temperature,
+      max_tokens: maxTokens,
+      system_prompt: systemPrompt,
+      disclaimer: template?.disclaimer ?? null,
+      // knex only auto-JSON-encodes plain objects for jsonb columns, not arrays — stringify explicitly.
+      starters: JSON.stringify(template?.starters ?? []),
     } as any);
 
     await auditService.record({
@@ -97,9 +112,12 @@ export const agentService = {
       action: 'agent.create',
       resourceType: 'agent',
       resourceId: agent.id,
-      metadata: { metier: template.metier, model_id: params.modelId },
+      metadata: { model_id: params.modelId, template_id: template?.id ?? null },
     });
 
+    // The insert payload above stringifies `starters` for jsonb storage — restore the
+    // real array on the in-memory instance before returning it to the caller.
+    agent.starters = template?.starters ?? [];
     return publicAgentFields(agent);
   },
 
@@ -121,9 +139,10 @@ export const agentService = {
   },
 
   /**
-   * Chat with an agent: injects its system prompt, then reuses the same wallet/budget/filter
-   * pipeline as the raw Playground (gatewayService.prepare/finalize) so spend, guardrails and
-   * request logs behave identically. Non-streaming only for this first iteration.
+   * Chat with an agent: injects its system prompt and, when tools are attached, runs an
+   * agentic tool-calling loop — each model↔tool round trip reuses the same wallet/budget/
+   * filter pipeline as the raw Playground (gatewayService.prepare/finalize), so spend,
+   * guardrails and request logs behave identically per LLM call. Non-streaming.
    */
   async chatCompletions(params: {
     organizationId: string;
@@ -150,68 +169,156 @@ export const agentService = {
     const organization = await Organization.query().findById(params.organizationId);
     if (!organization) throw Object.assign(new Error('NOT_FOUND'), { code: 'NOT_FOUND' });
 
-    const started = Date.now();
-    const chatBody = {
-      model: agent.model_id,
-      messages: [{ role: 'system', content: agent.system_prompt }, ...params.messages],
-      stream: false,
-    };
+    const nativeToolDefs = nativeToolsService.list();
+    const nativeToolsByName = new Map(nativeToolDefs.map((t) => [t.name, t]));
+    const mcpToolDefs = await mcpRegistryService.listToolsForAgent(params.organizationId, agent.id);
+    const mcpToolsByLlmName = new Map(mcpToolDefs.map((t) => [t.llmName, t]));
 
-    const { model, payload, filterResult } = await gatewayService.prepare(
-      { apiKey: key, organization, locale: params.locale },
-      chatBody,
-    );
-    if (!model) throw Object.assign(new Error('MISSING_FIELDS'), { code: 'MISSING_FIELDS' });
+    const tools = [
+      ...nativeToolDefs.map((t) => ({
+        type: 'function' as const,
+        function: { name: t.name, description: t.description, parameters: t.inputSchema },
+      })),
+      ...mcpToolDefs.map((t) => ({
+        type: 'function' as const,
+        function: {
+          name: t.llmName,
+          description: t.description || undefined,
+          parameters: t.inputSchema,
+        },
+      })),
+    ];
 
-    const virtualKey = apiKeyService.resolveVirtualKeyPlaintext(key);
-    if (!virtualKey) {
-      throw Object.assign(new Error('KEY_PLAINTEXT_UNAVAILABLE'), {
-        code: 'KEY_PLAINTEXT_UNAVAILABLE',
-      });
-    }
+    /** One model call: prepare → forward → finalize, reusing the shared gateway pipeline. */
+    const runOnce = async (chatMessages: ChatMessage[]) => {
+      const started = Date.now();
+      const chatBody: Record<string, unknown> = {
+        model: agent.model_id,
+        messages: chatMessages,
+        stream: false,
+        temperature: Number(agent.temperature),
+        max_tokens: agent.max_tokens,
+      };
+      if (tools.length) {
+        chatBody.tools = tools;
+        chatBody.tool_choice = 'auto';
+      }
 
-    const result = await llmRouter.forward(payload as any, model, { bearerKey: virtualKey });
-    const latencyMs = Date.now() - started;
+      const { model, payload, filterResult } = await gatewayService.prepare(
+        { apiKey: key, organization, locale: params.locale },
+        chatBody as any,
+      );
+      if (!model) throw Object.assign(new Error('MISSING_FIELDS'), { code: 'MISSING_FIELDS' });
 
-    if (result.status >= 400) {
-      await gatewayService.logError({
+      const virtualKey = apiKeyService.resolveVirtualKeyPlaintext(key);
+      if (!virtualKey) {
+        throw Object.assign(new Error('KEY_PLAINTEXT_UNAVAILABLE'), {
+          code: 'KEY_PLAINTEXT_UNAVAILABLE',
+        });
+      }
+
+      const result = await llmRouter.forward(payload as any, model, { bearerKey: virtualKey });
+      const latencyMs = Date.now() - started;
+
+      if (result.status >= 400) {
+        await gatewayService.logError({
+          organization,
+          apiKey: key,
+          model,
+          latencyMs,
+          errorCode: 'PROVIDER_ERROR',
+        });
+        const err = Object.assign(new Error('PROVIDER_ERROR'), { code: 'PROVIDER_ERROR' });
+        (err as any).status = result.status;
+        (err as any).data = result.data;
+        throw err;
+      }
+
+      const usage = extractUsage(result.data);
+      await gatewayService.finalize({
         organization,
         apiKey: key,
         model,
+        body: payload,
+        responseData: result.data,
         latencyMs,
-        errorCode: 'PROVIDER_ERROR',
+        backend: result.backend,
+        filterAction: filterResult.action === 'redact' ? 'redact' : undefined,
+        ruleId: filterResult.rule?.id,
+        status: filterResult.action === 'redact' ? 'redacted' : 'success',
       });
-      const err = Object.assign(new Error('PROVIDER_ERROR'), { code: 'PROVIDER_ERROR' });
-      (err as any).status = result.status;
-      (err as any).data = result.data;
-      throw err;
+
+      const base =
+        result.data && typeof result.data === 'object'
+          ? (result.data as Record<string, unknown>)
+          : {};
+      return {
+        message: ((base as any)?.choices?.[0]?.message || {}) as ChatMessage & {
+          tool_calls?: Array<{ id: string; function: { name: string; arguments: string } }>;
+        },
+        modelId: (base as any)?.model || agent.model_id,
+        usage,
+      };
+    };
+
+    const conversation: ChatMessage[] = [
+      { role: 'system', content: agent.system_prompt },
+      ...params.messages,
+    ];
+
+    let totalPromptTokens = 0;
+    let totalCompletionTokens = 0;
+    let lastModelId = agent.model_id;
+
+    for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+      const { message, modelId, usage } = await runOnce(conversation);
+      totalPromptTokens += usage.input;
+      totalCompletionTokens += usage.output;
+      lastModelId = modelId;
+
+      const toolCalls = message.tool_calls || [];
+      if (!toolCalls.length) {
+        return {
+          content: message.content || '',
+          model: lastModelId,
+          usage: { prompt_tokens: totalPromptTokens, completion_tokens: totalCompletionTokens },
+        };
+      }
+
+      conversation.push(message);
+      for (const call of toolCalls) {
+        const name = call.function.name;
+        let content: string;
+        try {
+          const args = call.function.arguments ? JSON.parse(call.function.arguments) : {};
+          if (nativeToolsByName.has(name)) {
+            content = await nativeToolsService.call(name, args, {
+              organizationId: params.organizationId,
+              agentId: agent.id,
+            });
+          } else {
+            const tool = mcpToolsByLlmName.get(name);
+            if (!tool) throw new Error(`outil "${name}" inconnu`);
+            content = await mcpRegistryService.callTool(
+              params.organizationId,
+              tool.serverId,
+              tool.toolName,
+              args,
+            );
+          }
+        } catch (err: any) {
+          content = `Erreur lors de l'appel de l'outil "${name}" : ${err.message || 'échec inconnu'}.`;
+        }
+        conversation.push({ role: 'tool', tool_call_id: call.id, content });
+      }
     }
 
-    const usage = extractUsage(result.data);
-    await gatewayService.finalize({
-      organization,
-      apiKey: key,
-      model,
-      body: payload,
-      responseData: result.data,
-      latencyMs,
-      backend: result.backend,
-      filterAction: filterResult.action === 'redact' ? 'redact' : undefined,
-      ruleId: filterResult.rule?.id,
-      status: filterResult.action === 'redact' ? 'redacted' : 'success',
-    });
-
-    const base =
-      result.data && typeof result.data === 'object'
-        ? (result.data as Record<string, unknown>)
-        : {};
-    const content =
-      (base as any)?.choices?.[0]?.message?.content || '';
-
+    // Ran out of rounds — return whatever the last assistant turn said, if anything.
+    const lastAssistant = [...conversation].reverse().find((m) => m.role === 'assistant');
     return {
-      content,
-      model: (base as any)?.model || agent.model_id,
-      usage: { prompt_tokens: usage.input, completion_tokens: usage.output },
+      content: (lastAssistant?.content as string) || '',
+      model: lastModelId,
+      usage: { prompt_tokens: totalPromptTokens, completion_tokens: totalCompletionTokens },
     };
   },
 };
