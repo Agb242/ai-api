@@ -9,22 +9,27 @@ import { keysApi } from '@/lib/api/keys.api';
 import { playgroundApi } from '@/lib/api/playground.api';
 import type { ApiKey, ApiKeyCreated } from '@/lib/types/api-key';
 import type { PlaygroundModel } from '@/lib/types/playground-model';
+import type { PlaygroundCapabilities } from '@/lib/types/playground-capabilities';
+import {
+  DEFAULT_JSON_SCHEMA,
+  WEB_SEARCH_TOOL,
+  hasOpenAiParam,
+} from '@/lib/types/playground-capabilities';
 import { getGatewayBase } from '@/lib/gateway-url';
 import { ApiKeySelect } from '@/components/playground/ApiKeySelect';
 import { ModelPicker } from '@/components/playground/ModelPicker';
 import { ModelInfoPanel } from '@/components/playground/ModelInfoPanel';
 import { ChatMessage } from '@/components/playground/ChatMessage';
 import { ChatComposer } from '@/components/playground/ChatComposer';
+import { RunSettingsPanel, type RunSettingsValue } from '@/components/playground/RunSettingsPanel';
+import { GetCodeDialog } from '@/components/playground/GetCodeDialog';
+import { StarterCards } from '@/components/playground/StarterCards';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { useAuthStore } from '@/lib/stores/auth.store';
-import { ChevronDown } from 'lucide-react';
 
 type Msg = {
   role: 'user' | 'assistant' | 'system';
@@ -66,10 +71,6 @@ export default function PlaygroundPage() {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Msg[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const [temperature, setTemperature] = useState(0.7);
-  const [maxTokens, setMaxTokens] = useState(1024);
-  const [streamEnabled, setStreamEnabled] = useState(true);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [reveal, setReveal] = useState<ApiKeyCreated | null>(null);
   const [embedInput, setEmbedInput] = useState('Hello from noabi');
@@ -80,6 +81,24 @@ export default function PlaygroundPage() {
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
+  const [getCodeOpen, setGetCodeOpen] = useState(false);
+  const [fallbackTesting, setFallbackTesting] = useState(false);
+  const [tokenHint, setTokenHint] = useState<string | null>(null);
+  const [run, setRun] = useState<RunSettingsValue>({
+    systemInstructions: '',
+    temperature: 0.7,
+    maxTokens: 1024,
+    topP: 1,
+    streamEnabled: true,
+    reasoningEffort: 'medium',
+    thinkingLevel: 'medium',
+    functionCalling: false,
+    selectedTools: [],
+    webSearch: false,
+    structuredOutput: false,
+    jsonSchemaText: JSON.stringify(DEFAULT_JSON_SCHEMA, null, 2),
+    toolsEditorOpen: false,
+  });
 
   const { data: keys = [] } = useQuery({
     queryKey: ['keys', org?.id],
@@ -109,6 +128,16 @@ export default function PlaygroundPage() {
       return res.data!;
     },
     enabled: !!org?.id,
+  });
+
+  const { data: caps } = useQuery({
+    queryKey: ['playground-capabilities', org?.id, model],
+    queryFn: async () => {
+      const res = await playgroundApi.capabilities(model);
+      if (!res.success) throw new Error(res.error?.message);
+      return res.data as PlaygroundCapabilities;
+    },
+    enabled: !!org?.id && !!model && modality === 'chat',
   });
 
   const models = useMemo(() => {
@@ -155,6 +184,124 @@ export default function PlaygroundPage() {
 
   const selectedKey = keys.find((k) => k.id === apiKeyId);
 
+  const params = caps?.params || [];
+  const paramsKnown = Boolean(caps?.params_available);
+  const streamAllowed = !paramsKnown || hasOpenAiParam(params, 'stream');
+
+  useEffect(() => {
+    if (caps?.params_available && !hasOpenAiParam(caps.params, 'stream') && run.streamEnabled) {
+      setRun((s) => ({ ...s, streamEnabled: false }));
+    }
+  }, [caps, run.streamEnabled]);
+
+  useEffect(() => {
+    if (!caps?.token_counter_available || modality !== 'chat') {
+      setTokenHint(null);
+      return;
+    }
+    const handle = setTimeout(async () => {
+      const messagesForCount = [
+        ...(run.systemInstructions.trim()
+          ? [{ role: 'system', content: run.systemInstructions.trim() }]
+          : []),
+        ...messages.map((m) => ({ role: m.role, content: m.content })),
+        ...(input.trim() ? [{ role: 'user', content: input.trim() }] : []),
+      ];
+      const res = await playgroundApi.tokenCount({
+        model,
+        messages: messagesForCount,
+        prompt: input.trim() || run.systemInstructions,
+      });
+      if (!res.success || !res.data) {
+        setTokenHint(null);
+        return;
+      }
+      const data = res.data as { total_tokens?: number; prompt_tokens?: number };
+      const n = data.total_tokens ?? data.prompt_tokens;
+      setTokenHint(n != null ? t('tokenCount', { n: String(n) }) : null);
+    }, 400);
+    return () => clearTimeout(handle);
+  }, [
+    caps?.token_counter_available,
+    modality,
+    model,
+    input,
+    run.systemInstructions,
+    messages,
+    t,
+  ]);
+
+  function openaiTools(): unknown[] | undefined {
+    const canTools = Boolean(caps?.supports_tools || selectedModel?.supports_tools);
+    if (!canTools) return undefined;
+    if (!run.functionCalling && !run.webSearch) return undefined;
+    const list: unknown[] = [];
+    if (run.functionCalling) {
+      const selected = (caps?.tools.mcp || []).filter(
+        (tool) => run.selectedTools.length === 0 || run.selectedTools.includes(tool.name),
+      );
+      for (const tool of selected) {
+        list.push({
+          type: 'function',
+          function: {
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema || { type: 'object', properties: {} },
+          },
+        });
+      }
+    }
+    if (run.webSearch) list.push(WEB_SEARCH_TOOL);
+    return list.length ? list : undefined;
+  }
+
+  function chatPayload(userMessages: Msg[], stream: boolean): Record<string, unknown> {
+    const msgs: Array<{ role: string; content: string }> = [];
+    if (run.systemInstructions.trim()) {
+      msgs.push({ role: 'system', content: run.systemInstructions.trim() });
+    }
+    for (const m of userMessages) {
+      if (m.role === 'system') continue;
+      msgs.push({ role: m.role, content: m.content });
+    }
+    const payload: Record<string, unknown> = {
+      model: model || 'llama-3.3-70b',
+      messages: msgs,
+      stream,
+    };
+    if (!paramsKnown || hasOpenAiParam(params, 'temperature')) {
+      payload.temperature = run.temperature;
+    }
+    if (!paramsKnown || hasOpenAiParam(params, 'max_tokens')) {
+      payload.max_tokens = run.maxTokens;
+    }
+    if (hasOpenAiParam(params, 'top_p')) payload.top_p = run.topP;
+    if (hasOpenAiParam(params, 'reasoning_effort')) {
+      payload.reasoning_effort = run.reasoningEffort;
+    }
+    if (hasOpenAiParam(params, 'thinking')) {
+      const budget =
+        run.thinkingLevel === 'high' ? 10000 : run.thinkingLevel === 'low' ? 1024 : 4096;
+      payload.thinking = { type: 'enabled', budget_tokens: budget };
+    }
+    const tools = openaiTools();
+    if (tools) {
+      payload.tools = tools;
+      payload.tool_choice = 'auto';
+    }
+    if (run.structuredOutput) {
+      try {
+        payload.response_format = {
+          type: 'json_schema',
+          json_schema: JSON.parse(run.jsonSchemaText),
+        };
+      } catch {
+        /* ignore invalid schema */
+      }
+    }
+    return payload;
+  }
+
   const curlSnippet = useMemo(() => {
     if (modality === 'embeddings') {
       return `curl ${gateway}/v1/embeddings \\
@@ -185,16 +332,14 @@ export default function PlaygroundPage() {
   })}' \\
   --output speech.mp3`;
     }
+    const payload = chatPayload(
+      [...messages, ...(input.trim() ? [{ role: 'user' as const, content: input.trim() }] : [])],
+      streamAllowed && run.streamEnabled,
+    );
     return `curl ${gateway}/v1/chat/completions \\
   -H "Authorization: Bearer $NOABI_API_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '${JSON.stringify({
-    model: model || 'llama-3.3-70b',
-    messages: [{ role: 'user', content: input.trim() || 'Hello' }],
-    stream: true,
-    temperature,
-    max_tokens: maxTokens,
-  })}'`;
+  -d '${JSON.stringify(payload)}'`;
   }, [
     modality,
     gateway,
@@ -203,8 +348,12 @@ export default function PlaygroundPage() {
     imagePrompt,
     audioText,
     input,
-    temperature,
-    maxTokens,
+    messages,
+    run,
+    params,
+    paramsKnown,
+    streamAllowed,
+    caps,
   ]);
 
   async function sendChat() {
@@ -224,17 +373,15 @@ export default function PlaygroundPage() {
 
     const ac = new AbortController();
     abortRef.current = ac;
+    const useStream = streamAllowed && run.streamEnabled;
+    const payload = chatPayload(next, useStream);
 
     try {
       const res = await playgroundApi.chatCompletionsStream(
         {
           api_key_id: apiKeyId,
-          model,
-          messages: next,
-          stream: streamEnabled,
-          temperature,
-          max_tokens: maxTokens,
-        },
+          ...payload,
+        } as any,
         ac.signal,
       );
 
@@ -243,7 +390,7 @@ export default function PlaygroundPage() {
         throw new Error(err?.error?.message || `HTTP ${res.status}`);
       }
 
-      if (!streamEnabled) {
+      if (!useStream) {
         const json = await res.json();
         const text =
           json?.data?.choices?.[0]?.message?.content ||
@@ -458,6 +605,32 @@ export default function PlaygroundPage() {
     }
   }
 
+  async function testFallback() {
+    if (!apiKeyId || !model) {
+      toast.error(t('missingKeyCreate'));
+      return;
+    }
+    setFallbackTesting(true);
+    try {
+      const res = await playgroundApi.fallbackTest({
+        api_key_id: apiKeyId,
+        model,
+        messages: [{ role: 'user', content: 'Reply with a single word: ok' }],
+      });
+      if (!res.success) throw new Error(res.error?.message || t('error'));
+      const data = res.data as any;
+      const text =
+        data?.choices?.[0]?.message?.content ||
+        data?.data?.choices?.[0]?.message?.content ||
+        JSON.stringify(data).slice(0, 400);
+      toast.success(text || t('fallbackOk'));
+    } catch (e: any) {
+      toast.error(e.message || t('error'));
+    } finally {
+      setFallbackTesting(false);
+    }
+  }
+
   const modalityTabs: { id: Modality; label: string }[] = [
     { id: 'chat', label: t('tabChat') },
     { id: 'embeddings', label: t('tabEmbeddings') },
@@ -472,29 +645,37 @@ export default function PlaygroundPage() {
           <h1 className="font-display text-lg font-semibold">{t('title')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
         </div>
-        <div className="inline-flex rounded-lg border border-border bg-muted p-1">
-          <button
-            type="button"
-            onClick={() => setMode('playground')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              mode === 'playground'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t('tabPlayground')}
-          </button>
-          <button
-            type="button"
-            onClick={() => setMode('curl')}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              mode === 'curl'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {t('tabCurl')}
-          </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {modality === 'chat' ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => setGetCodeOpen(true)}>
+              {t('getCode')}
+            </Button>
+          ) : (
+            <div className="inline-flex rounded-lg border border-border bg-muted p-1">
+              <button
+                type="button"
+                onClick={() => setMode('playground')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  mode === 'playground'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('tabPlayground')}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMode('curl')}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
+                  mode === 'curl'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                {t('tabCurl')}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -521,8 +702,8 @@ export default function PlaygroundPage() {
         </p>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_280px]">
-        <div className="space-y-3">
+      <div className={modality === 'chat' ? 'grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_320px]' : 'grid gap-4 lg:grid-cols-[1fr_280px]'}>
+        <div className="flex min-h-0 flex-col gap-3">
           <ApiKeySelect
             keys={keys}
             value={apiKeyId}
@@ -530,51 +711,11 @@ export default function PlaygroundPage() {
             onCreateClick={() => setCreateOpen(true)}
           />
           <ModelPicker models={models} value={model} onChange={setModel} />
-        </div>
-        <ModelInfoPanel model={selectedModel} walletBalance={ctx?.wallet_balance} />
-      </div>
+          {modality !== 'chat' ? (
+            <ModelInfoPanel model={selectedModel} walletBalance={ctx?.wallet_balance} />
+          ) : null}
 
-      {modality === 'chat' ? (
-        <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-          <CollapsibleTrigger asChild>
-            <Button type="button" variant="ghost" size="sm" className="gap-1 px-0">
-              {t('advanced')}
-              <ChevronDown
-                className={`h-3.5 w-3.5 transition ${advancedOpen ? 'rotate-180' : ''}`}
-              />
-            </Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="mt-2 grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-3">
-            <div className="space-y-1.5">
-              <Label>{t('temperature')}</Label>
-              <Input
-                type="number"
-                min={0}
-                max={2}
-                step={0.1}
-                value={temperature}
-                onChange={(e) => setTemperature(Number(e.target.value))}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label>{t('maxTokens')}</Label>
-              <Input
-                type="number"
-                min={1}
-                max={128000}
-                value={maxTokens}
-                onChange={(e) => setMaxTokens(Number(e.target.value))}
-              />
-            </div>
-            <div className="flex items-center gap-2 pt-6">
-              <Switch checked={streamEnabled} onCheckedChange={setStreamEnabled} id="stream" />
-              <Label htmlFor="stream">{t('streamToggle')}</Label>
-            </div>
-          </CollapsibleContent>
-        </Collapsible>
-      ) : null}
-
-      {mode === 'curl' ? (
+      {mode === 'curl' && modality !== 'chat' ? (
         <div className="space-y-3">
           <p className="text-xs text-muted-foreground">
             {t('gateway')}: <code className="font-mono">{gateway}</code>
@@ -587,6 +728,20 @@ export default function PlaygroundPage() {
         </div>
       ) : modality === 'chat' ? (
         <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <StarterCards
+            onPick={(cfg) =>
+              setRun((s) => ({
+                ...s,
+                systemInstructions: cfg.systemInstructions,
+                temperature: cfg.temperature,
+                functionCalling: Boolean(cfg.functionCalling),
+                structuredOutput: Boolean(cfg.structuredOutput),
+                selectedTools: cfg.functionCalling
+                  ? (caps?.tools.mcp || []).map((x) => x.name)
+                  : s.selectedTools,
+              }))
+            }
+          />
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
             {messages.length === 0 ? (
               <p className="text-sm text-muted-foreground">{t('empty')}</p>
@@ -611,6 +766,7 @@ export default function PlaygroundPage() {
             onStop={stop}
             streaming={streaming}
             disabled={!apiKeyId || selectedKey?.status !== 'active'}
+            tokenHint={tokenHint}
           />
         </div>
       ) : modality === 'embeddings' ? (
@@ -667,6 +823,29 @@ export default function PlaygroundPage() {
           {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : null}
         </div>
       )}
+        </div>
+        {modality === 'chat' ? (
+          <RunSettingsPanel
+            model={selectedModel}
+            caps={caps}
+            value={run}
+            onChange={(patch) => setRun((s) => ({ ...s, ...patch }))}
+            onFallbackTest={() => void testFallback()}
+            fallbackTesting={fallbackTesting}
+            walletBalance={ctx?.wallet_balance}
+          />
+        ) : null}
+      </div>
+
+      <GetCodeDialog
+        open={getCodeOpen}
+        onOpenChange={setGetCodeOpen}
+        gateway={gateway}
+        payload={chatPayload(
+          [...messages, ...(input.trim() ? [{ role: 'user' as const, content: input.trim() }] : [])],
+          streamAllowed && run.streamEnabled,
+        )}
+      />
 
       <CreateApiKeyDialog
         open={createOpen}
