@@ -6,6 +6,30 @@ import { playgroundController } from '../controllers/playground.controller';
 const router = new Router({ prefix: '/playground' });
 
 router.get('/context', authenticate, requireOrg('viewer'), playgroundController.context);
+router.get(
+  '/capabilities',
+  authenticate,
+  requireOrg('viewer'),
+  playgroundController.capabilities,
+);
+router.post(
+  '/token-count',
+  authenticate,
+  requireOrg('viewer'),
+  playgroundController.tokenCount,
+);
+router.post(
+  '/transform-request',
+  authenticate,
+  requireOrg('developer'),
+  playgroundController.transformRequest,
+);
+router.post(
+  '/fallback-test',
+  authenticate,
+  requireOrg('developer'),
+  playgroundController.fallbackTest,
+);
 router.post(
   '/chat/completions',
   authenticate,

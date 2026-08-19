@@ -8,7 +8,38 @@ import { Organization } from '../models/Organization';
 import { walletService } from '../services/wallet.service';
 import { t } from '../i18n/messages';
 import { realtimeHub } from '../services/realtime.service';
+import { litellmAdmin } from '../services/litellm-admin.service';
+import { playgroundCapabilitiesService } from '../services/playground-capabilities.service';
 import logger from '../config/logger';
+
+const CHAT_PASSTHROUGH = [
+  'temperature',
+  'max_tokens',
+  'top_p',
+  'stream',
+  'tools',
+  'tool_choice',
+  'response_format',
+  'reasoning_effort',
+  'thinking',
+  'mock_testing_fallbacks',
+  'fallbacks',
+] as const;
+
+function buildChatBody(body: Record<string, unknown>) {
+  const chatBody: Record<string, unknown> = {
+    model: body.model,
+    messages: body.messages,
+    stream: body.stream !== false,
+  };
+  for (const key of CHAT_PASSTHROUGH) {
+    if (key === 'stream') continue;
+    if (body[key] !== undefined && body[key] !== null) {
+      chatBody[key] = body[key];
+    }
+  }
+  return chatBody;
+}
 
 function ok(ctx: Context, data: unknown, status = 200) {
   ctx.status = status;
@@ -52,13 +83,7 @@ export const playgroundController = {
     const organization = await Organization.query().findById(ctx.state.orgId!);
     if (!organization) return fail(ctx, 'NOT_FOUND', 404);
 
-    const chatBody = {
-      model: body.model,
-      messages: body.messages,
-      stream: body.stream !== false,
-      temperature: body.temperature,
-      max_tokens: body.max_tokens,
-    };
+    const chatBody = buildChatBody(body);
 
     try {
       const { model, payload, filterResult } = await gatewayService.prepare(
@@ -253,6 +278,65 @@ export const playgroundController = {
       wallet_balance: wallet ? Number(wallet.balance) : 0,
       currency: 'credits',
     });
+  },
+
+  async capabilities(ctx: Context) {
+    const model = typeof ctx.query.model === 'string' ? ctx.query.model : '';
+    const data = await playgroundCapabilitiesService.forModel(ctx.state.orgId!, model);
+    ok(ctx, data);
+  },
+
+  async tokenCount(ctx: Context) {
+    const body = (ctx.request.body || {}) as {
+      model?: string;
+      messages?: unknown[];
+      prompt?: string;
+      text?: string;
+    };
+    const result = await litellmAdmin.tokenCounter({
+      model: body.model,
+      messages: body.messages,
+      prompt: body.prompt || body.text,
+    });
+    if (!result) return fail(ctx, 'LITELLM_UNAVAILABLE', 503);
+    ok(ctx, result);
+  },
+
+  async transformRequest(ctx: Context) {
+    const body = ctx.request.body;
+    const result = await litellmAdmin.transformRequest(body);
+    if (!result) return fail(ctx, 'LITELLM_UNAVAILABLE', 503);
+    ok(ctx, result);
+  },
+
+  async fallbackTest(ctx: Context) {
+    const locale = (ctx.state.locale || 'fr') as 'fr' | 'en';
+    const body = (ctx.request.body || {}) as any;
+    const apiKeyId = String(body.api_key_id || '');
+    const model = String(body.model || '');
+    if (!apiKeyId || !model) return fail(ctx, 'MISSING_FIELDS', 400);
+
+    const caps = await playgroundCapabilitiesService.forModel(ctx.state.orgId!, model);
+    const chain = caps.fallback?.models || [];
+    if (!chain.length) return fail(ctx, 'NOT_FOUND', 404);
+
+    const params = new Set((caps.params || []).map((p) => p.toLowerCase()));
+    const testBody: Record<string, unknown> = {
+      api_key_id: apiKeyId,
+      model: params.has('mock_testing_fallbacks') ? model : chain[0],
+      messages: body.messages?.length
+        ? body.messages
+        : [{ role: 'user', content: 'Reply with a single word: ok' }],
+      stream: false,
+      max_tokens: 16,
+    };
+    if (params.has('mock_testing_fallbacks')) {
+      testBody.mock_testing_fallbacks = true;
+    }
+
+    ctx.request.body = testBody;
+    ctx.state.locale = locale;
+    return playgroundController.chatCompletions(ctx);
   },
 
   /** Embeddings / images / audio via virtual key (session auth). */
