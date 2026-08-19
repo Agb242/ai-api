@@ -1,3 +1,5 @@
+import type { ModelKind } from '@/lib/sandbox/model-kinds';
+
 export type PlaygroundModel = {
   id: string;
   display_name: string;
@@ -8,6 +10,7 @@ export type PlaygroundModel = {
   context_window?: number | null;
   max_tokens?: number | null;
   capabilities: string[];
+  kinds: ModelKind[];
   supports_streaming?: boolean;
   supports_vision?: boolean;
   supports_tools?: boolean;

@@ -17,6 +17,76 @@ function inferProvider(modelId: string, catalogProvider?: string | null): string
   return 'other';
 }
 
+export type ModelKind = 'chat' | 'embedding' | 'image' | 'audio';
+
+const KIND_ALIASES: Record<string, ModelKind> = {
+  chat: 'chat',
+  completion: 'chat',
+  completions: 'chat',
+  conversational: 'chat',
+  embedding: 'embedding',
+  embeddings: 'embedding',
+  embed: 'embedding',
+  image: 'image',
+  images: 'image',
+  image_generation: 'image',
+  image_gen: 'image',
+  audio: 'audio',
+  audio_speech: 'audio',
+  audio_transcription: 'audio',
+  tts: 'audio',
+  speech: 'audio',
+  whisper: 'audio',
+};
+
+function collectModeStrings(meta: Record<string, unknown>, raw: any): string[] {
+  const out: string[] = [];
+  const push = (v: unknown) => {
+    if (typeof v === 'string' && v.trim()) out.push(v.toLowerCase());
+    if (Array.isArray(v)) v.forEach(push);
+  };
+  push(meta.mode);
+  push(meta.modes);
+  push(meta.supported_modalities);
+  push(meta.modality);
+  push((meta.model_info as any)?.mode);
+  push(raw?.mode);
+  push(raw?.model_info?.mode);
+  push(raw?.litellm_params?.mode);
+  if (Array.isArray(meta.capabilities)) {
+    for (const c of meta.capabilities) push(c);
+  }
+  return out;
+}
+
+/** Infer sandbox kinds from LiteLLM/catalog metadata, not vendor model names. */
+export function inferModelKinds(
+  id: string,
+  meta: Record<string, unknown>,
+  raw?: any,
+  capabilities: string[] = [],
+): ModelKind[] {
+  const kinds = new Set<ModelKind>();
+  for (const token of [...collectModeStrings(meta, raw), ...capabilities.map((c) => c.toLowerCase())]) {
+    const mapped = KIND_ALIASES[token];
+    if (mapped) kinds.add(mapped);
+    if (token.includes('embed')) kinds.add('embedding');
+    if (token.includes('image') || token.includes('vision-gen')) kinds.add('image');
+    if (token === 'vision') kinds.add('chat');
+    if (token.includes('audio') || token.includes('speech') || token.includes('tts')) kinds.add('audio');
+  }
+
+  const slug = id.toLowerCase();
+  if (/(^|[/_\-.])(embed|embedding)s?([/_\-.]|$)/.test(slug)) kinds.add('embedding');
+  if (/(^|[/_\-.])(tts|whisper|speech|audio)([/_\-.]|$)/.test(slug)) kinds.add('audio');
+  if (/(^|[/_\-.])(dall-e|dalle|imagen|flux|stable-diffusion|image-gen)([/_\-.]|$)/.test(slug)) {
+    kinds.add('image');
+  }
+
+  if (!kinds.size) kinds.add('chat');
+  return Array.from(kinds);
+}
+
 function enrichModelRow(raw: any, catalog?: LlmModel | null) {
   const id = String(raw.id || raw.model_id || catalog?.model_id || '');
   const meta = {
@@ -51,6 +121,7 @@ function enrichModelRow(raw: any, catalog?: LlmModel | null) {
     description: (meta.description as string) || null,
     updated_at: catalog?.updated_at || raw.updated_at || null,
     metadata: meta,
+    kinds: inferModelKinds(id, meta, raw, capabilities),
   };
 }
 

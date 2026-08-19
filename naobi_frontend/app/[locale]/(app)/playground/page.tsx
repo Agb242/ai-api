@@ -18,18 +18,27 @@ import {
 import { getGatewayBase } from '@/lib/gateway-url';
 import { ApiKeySelect } from '@/components/playground/ApiKeySelect';
 import { ModelPicker } from '@/components/playground/ModelPicker';
-import { ModelInfoPanel } from '@/components/playground/ModelInfoPanel';
 import { ChatMessage } from '@/components/playground/ChatMessage';
-import { ChatComposer } from '@/components/playground/ChatComposer';
 import { RunSettingsPanel, type RunSettingsValue } from '@/components/playground/RunSettingsPanel';
 import { GetCodeDialog } from '@/components/playground/GetCodeDialog';
-import { StarterCards } from '@/components/playground/StarterCards';
+import { ChatEmptyState } from '@/components/sandbox/ChatEmptyState';
 import { CreateApiKeyDialog } from '@/components/keys/CreateApiKeyDialog';
 import { RevealApiKeyDialog } from '@/components/keys/RevealApiKeyDialog';
+import { CapabilityTabs } from '@/components/sandbox/CapabilityTabs';
+import { PromptComposer } from '@/components/sandbox/PromptComposer';
+import { EmbeddingWorkspace } from '@/components/sandbox/EmbeddingWorkspace';
+import { ImageWorkspace } from '@/components/sandbox/ImageWorkspace';
+import { AudioWorkspace } from '@/components/sandbox/AudioWorkspace';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet';
 import { useAuthStore } from '@/lib/stores/auth.store';
+import {
+  availableCapabilities,
+  filterModelsByCapability,
+  inferModelKindsFromRow,
+  type SandboxCapability,
+} from '@/lib/sandbox/model-kinds';
+import { Plus, SlidersHorizontal } from 'lucide-react';
 
 type Msg = {
   role: 'user' | 'assistant' | 'system';
@@ -55,7 +64,7 @@ function readUsage(json: any): { prompt_tokens: number; completion_tokens: numbe
     completion_tokens: Number.isFinite(completion_tokens) ? completion_tokens : 0,
   };
 }
-type Modality = 'chat' | 'embeddings' | 'image' | 'audio';
+type Modality = SandboxCapability;
 
 export default function PlaygroundPage() {
   const t = useTranslations('playground');
@@ -82,6 +91,7 @@ export default function PlaygroundPage() {
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const [getCodeOpen, setGetCodeOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [fallbackTesting, setFallbackTesting] = useState(false);
   const [tokenHint, setTokenHint] = useState<string | null>(null);
   const [run, setRun] = useState<RunSettingsValue>({
@@ -152,6 +162,12 @@ export default function PlaygroundPage() {
       context_window: m.context_window ?? null,
       max_tokens: m.max_tokens ?? null,
       capabilities: Array.isArray(m.capabilities) ? m.capabilities : ['streaming'],
+      kinds: inferModelKindsFromRow({
+        id: m.id || m.model_id,
+        capabilities: Array.isArray(m.capabilities) ? m.capabilities : [],
+        kinds: m.kinds,
+        metadata: m.metadata,
+      }),
       supports_streaming: m.supports_streaming !== false,
       supports_vision: Boolean(m.supports_vision),
       supports_tools: Boolean(m.supports_tools),
@@ -161,10 +177,24 @@ export default function PlaygroundPage() {
   }, [modelsPayload]);
 
   const selectedModel = models.find((m) => m.id === model) || null;
+  const capsAvailable = useMemo(() => availableCapabilities(models), [models]);
+  const compatibleModels = useMemo(
+    () => filterModelsByCapability(models, modality),
+    [models, modality],
+  );
 
   useEffect(() => {
-    if (!model && models[0]) setModel(models[0].id);
-  }, [model, models]);
+    if (capsAvailable.length && !capsAvailable.includes(modality)) {
+      setModality(capsAvailable[0]);
+    }
+  }, [capsAvailable, modality]);
+
+  useEffect(() => {
+    if (!compatibleModels.length) return;
+    if (!compatibleModels.some((m) => m.id === model)) {
+      setModel(compatibleModels[0].id);
+    }
+  }, [compatibleModels, model]);
 
   useEffect(() => {
     if (!apiKeyId) {
@@ -631,211 +661,210 @@ export default function PlaygroundPage() {
     }
   }
 
-  const modalityTabs: { id: Modality; label: string }[] = [
-    { id: 'chat', label: t('tabChat') },
-    { id: 'embeddings', label: t('tabEmbeddings') },
-    { id: 'image', label: t('tabImage') },
-    { id: 'audio', label: t('tabAudio') },
-  ];
-
-  return (
-    <div className="flex h-[calc(100vh-3.5rem-64px)] flex-col gap-4 p-6 md:p-7">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <div>
-          <h1 className="font-display text-lg font-semibold">{t('title')}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t('subtitle')}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {modality === 'chat' ? (
-            <Button type="button" variant="outline" size="sm" onClick={() => setGetCodeOpen(true)}>
-              {t('getCode')}
-            </Button>
-          ) : (
-            <div className="inline-flex rounded-lg border border-border bg-muted p-1">
-              <button
-                type="button"
-                onClick={() => setMode('playground')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  mode === 'playground'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {t('tabPlayground')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('curl')}
-                className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-                  mode === 'curl'
-                    ? 'bg-background text-foreground shadow-sm'
-                    : 'text-muted-foreground hover:text-foreground'
-                }`}
-              >
-                {t('tabCurl')}
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
-
-      <div className="inline-flex flex-wrap gap-1 rounded-lg border border-border bg-card p-1">
-        {modalityTabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            onClick={() => setModality(tab.id)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition ${
-              modality === tab.id
-                ? 'bg-accent-soft text-primary'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {error ? (
-        <p className="border border-border p-3 text-sm text-muted-foreground">
-          {(error as Error).message}
-        </p>
-      ) : null}
-
-      <div className={modality === 'chat' ? 'grid min-h-0 flex-1 gap-4 lg:grid-cols-[1fr_320px]' : 'grid gap-4 lg:grid-cols-[1fr_280px]'}>
-        <div className="flex min-h-0 flex-col gap-3">
+  const settingsPanel = (
+    <RunSettingsPanel
+      model={selectedModel}
+      caps={caps}
+      value={run}
+      onChange={(patch) => setRun((s) => ({ ...s, ...patch }))}
+      onFallbackTest={() => void testFallback()}
+      fallbackTesting={fallbackTesting}
+      walletBalance={ctx?.wallet_balance}
+      capability={modality}
+      variant="flush"
+      header={
+        <div className="space-y-3">
           <ApiKeySelect
             keys={keys}
             value={apiKeyId}
             onChange={setApiKeyId}
             onCreateClick={() => setCreateOpen(true)}
           />
-          <ModelPicker models={models} value={model} onChange={setModel} />
-          {modality !== 'chat' ? (
-            <ModelInfoPanel model={selectedModel} walletBalance={ctx?.wallet_balance} />
+          <ModelPicker models={compatibleModels} value={model} onChange={setModel} />
+        </div>
+      }
+      getCodeSlot={
+        modality === 'chat' ? (
+          <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => setGetCodeOpen(true)}>
+            {t('getCode')}
+          </Button>
+        ) : (
+          <Button type="button" variant="outline" size="sm" className="w-full" onClick={() => void copyCurl()}>
+            {t('copyCurl')}
+          </Button>
+        )
+      }
+    />
+  );
+
+  return (
+    <div className="absolute inset-0 flex min-h-0 flex-col overflow-hidden bg-background">
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
+            <CapabilityTabs available={capsAvailable} value={modality} onChange={setModality} />
+            <div className="flex items-center gap-1.5">
+              {modality !== 'chat' ? (
+                <div className="mr-1 hidden rounded-full bg-muted p-0.5 sm:inline-flex">
+                  <button
+                    type="button"
+                    onClick={() => setMode('playground')}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      mode === 'playground' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {t('tabPlayground')}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setMode('curl')}
+                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      mode === 'curl' ? 'bg-background shadow-sm' : 'text-muted-foreground'
+                    }`}
+                  >
+                    {t('tabCurl')}
+                  </button>
+                </div>
+              ) : (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => setMessages([])}
+                  aria-label={t('newChat')}
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="lg:hidden"
+                onClick={() => setSettingsOpen(true)}
+              >
+                <SlidersHorizontal className="mr-1.5 h-3.5 w-3.5" />
+                {t('openSettings')}
+              </Button>
+            </div>
+          </header>
+
+          {error ? (
+            <p className="border-b border-border px-4 py-2 text-sm text-muted-foreground">
+              {(error as Error).message}
+            </p>
           ) : null}
 
-      {mode === 'curl' && modality !== 'chat' ? (
-        <div className="space-y-3">
-          <p className="text-xs text-muted-foreground">
-            {t('gateway')}: <code className="font-mono">{gateway}</code>
-          </p>
-          <p className="text-xs text-muted-foreground">{t('curlKeyHint')}</p>
-          <pre className="overflow-x-auto rounded-xl border border-border bg-card p-4 font-mono text-[11px] whitespace-pre-wrap">
-            {curlSnippet}
-          </pre>
-          <Button onClick={() => void copyCurl()}>{t('copyCurl')}</Button>
-        </div>
-      ) : modality === 'chat' ? (
-        <div className="flex min-h-0 flex-1 flex-col gap-3">
-          <StarterCards
-            onPick={(cfg) =>
-              setRun((s) => ({
-                ...s,
-                systemInstructions: cfg.systemInstructions,
-                temperature: cfg.temperature,
-                functionCalling: Boolean(cfg.functionCalling),
-                structuredOutput: Boolean(cfg.structuredOutput),
-                selectedTools: cfg.functionCalling
-                  ? (caps?.tools.mcp || []).map((x) => x.name)
-                  : s.selectedTools,
-              }))
-            }
-          />
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
-            {messages.length === 0 ? (
-              <p className="text-sm text-muted-foreground">{t('empty')}</p>
-            ) : (
-              messages.map((m, i) => (
-                <ChatMessage
-                  key={i}
-                  role={m.role}
-                  content={m.content}
-                  streaming={streaming && i === messages.length - 1 && m.role === 'assistant'}
-                  userInitials={userInitials}
-                  promptTokens={m.prompt_tokens}
-                  completionTokens={m.completion_tokens}
-                />
-              ))
-            )}
-          </div>
-          <ChatComposer
-            value={input}
-            onChange={setInput}
-            onSend={() => void sendChat()}
-            onStop={stop}
-            streaming={streaming}
-            disabled={!apiKeyId || selectedKey?.status !== 'active'}
-            tokenHint={tokenHint}
-          />
-        </div>
-      ) : modality === 'embeddings' ? (
-        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <Label>{t('embedInput')}</Label>
-          <Textarea
-            value={embedInput}
-            onChange={(e) => setEmbedInput(e.target.value)}
-            rows={4}
-            placeholder={t('embedPlaceholder')}
-          />
-          <Button disabled={busy} onClick={() => void runEmbeddings()}>
-            {busy ? t('running') : t('runEmbeddings')}
-          </Button>
-          {embedResult ? (
-            <pre className="overflow-x-auto rounded-lg bg-muted p-3 font-mono text-xs whitespace-pre-wrap">
-              {embedResult}
-            </pre>
-          ) : null}
-        </div>
-      ) : modality === 'image' ? (
-        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <Label>{t('imagePrompt')}</Label>
-          <Textarea
-            value={imagePrompt}
-            onChange={(e) => setImagePrompt(e.target.value)}
-            rows={3}
-            placeholder={t('imagePlaceholder')}
-          />
-          <Button disabled={busy} onClick={() => void runImage()}>
-            {busy ? t('running') : t('runImage')}
-          </Button>
-          {imageUrl ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={imageUrl}
-              alt={imagePrompt}
-              className="max-h-80 rounded-lg border border-border object-contain"
+          {mode === 'curl' && modality !== 'chat' ? (
+            <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-6">
+              <p className="text-xs text-muted-foreground">
+                {t('gateway')}: <code className="font-mono">{gateway}</code>
+              </p>
+              <p className="text-xs text-muted-foreground">{t('curlKeyHint')}</p>
+              <pre className="overflow-x-auto rounded-2xl border border-border bg-muted/40 p-5 font-mono text-[11px] whitespace-pre-wrap">
+                {curlSnippet}
+              </pre>
+              <Button onClick={() => void copyCurl()}>{t('copyCurl')}</Button>
+            </div>
+          ) : !compatibleModels.length ? (
+            <p className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
+              {t('noModelsForCapability')}
+            </p>
+          ) : modality === 'chat' ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {messages.length === 0 ? (
+                  <ChatEmptyState
+                    needsKey={!apiKeyId || selectedKey?.status !== 'active'}
+                    onCreateKey={() => setCreateOpen(true)}
+                    onPick={(cfg) =>
+                      setRun((s) => ({
+                        ...s,
+                        systemInstructions: cfg.systemInstructions,
+                        temperature: cfg.temperature,
+                        functionCalling: Boolean(cfg.functionCalling),
+                        structuredOutput: Boolean(cfg.structuredOutput),
+                        selectedTools: cfg.functionCalling
+                          ? (caps?.tools.mcp || []).map((x) => x.name)
+                          : s.selectedTools,
+                      }))
+                    }
+                  />
+                ) : (
+                  <div className="mx-auto w-full max-w-3xl space-y-6 px-6 py-8">
+                    {messages.map((m, i) => (
+                      <ChatMessage
+                        key={i}
+                        role={m.role}
+                        content={m.content}
+                        streaming={streaming && i === messages.length - 1 && m.role === 'assistant'}
+                        userInitials={userInitials}
+                        promptTokens={m.prompt_tokens}
+                        completionTokens={m.completion_tokens}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+              <PromptComposer
+                value={input}
+                onChange={setInput}
+                onSend={() => void sendChat()}
+                onStop={stop}
+                streaming={streaming}
+                disabled={!apiKeyId || selectedKey?.status !== 'active'}
+                tokenHint={tokenHint}
+                placeholder={t('composerPlaceholder')}
+                sendLabel={t('run')}
+                stopLabel={t('stop')}
+                toolsLabel={t('toolsSection')}
+                toolsHint={t('functionCallingHint')}
+                showTools={Boolean(caps?.supports_tools || selectedModel?.supports_tools)}
+                toolsEnabled={run.functionCalling}
+                onToolsChange={(v) => setRun((s) => ({ ...s, functionCalling: v }))}
+                toolsDisabled={!(caps?.supports_tools || selectedModel?.supports_tools)}
+              />
+            </div>
+          ) : modality === 'embeddings' ? (
+            <EmbeddingWorkspace
+              value={embedInput}
+              onChange={setEmbedInput}
+              result={embedResult}
+              busy={busy}
+              onRun={() => void runEmbeddings()}
             />
-          ) : null}
+          ) : modality === 'image' ? (
+            <ImageWorkspace
+              prompt={imagePrompt}
+              onChange={setImagePrompt}
+              imageUrl={imageUrl}
+              busy={busy}
+              onRun={() => void runImage()}
+            />
+          ) : (
+            <AudioWorkspace
+              value={audioText}
+              onChange={setAudioText}
+              audioUrl={audioUrl}
+              busy={busy}
+              onRun={() => void runAudio()}
+            />
+          )}
         </div>
-      ) : (
-        <div className="space-y-3 rounded-xl border border-border bg-card p-4">
-          <Label>{t('audioInput')}</Label>
-          <Textarea
-            value={audioText}
-            onChange={(e) => setAudioText(e.target.value)}
-            rows={3}
-            placeholder={t('audioPlaceholder')}
-          />
-          <Button disabled={busy} onClick={() => void runAudio()}>
-            {busy ? t('running') : t('runAudio')}
-          </Button>
-          {audioUrl ? <audio controls src={audioUrl} className="w-full" /> : null}
-        </div>
-      )}
-        </div>
-        {modality === 'chat' ? (
-          <RunSettingsPanel
-            model={selectedModel}
-            caps={caps}
-            value={run}
-            onChange={(patch) => setRun((s) => ({ ...s, ...patch }))}
-            onFallbackTest={() => void testFallback()}
-            fallbackTesting={fallbackTesting}
-            walletBalance={ctx?.wallet_balance}
-          />
-        ) : null}
+
+        <aside className="hidden h-full min-h-0 w-[360px] shrink-0 overflow-hidden border-l border-border lg:flex lg:flex-col">
+          {settingsPanel}
+        </aside>
       </div>
+
+      <Sheet open={settingsOpen} onOpenChange={setSettingsOpen}>
+        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+          <SheetHeader>
+            <SheetTitle>{t('runSettings')}</SheetTitle>
+          </SheetHeader>
+          <div className="px-4 pb-6">{settingsPanel}</div>
+        </SheetContent>
+      </Sheet>
 
       <GetCodeDialog
         open={getCodeOpen}

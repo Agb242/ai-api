@@ -11,7 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Input } from '@/components/ui/input';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { ChevronDown } from 'lucide-react';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 
 export type RunSettingsValue = {
   systemInstructions: string;
@@ -34,10 +34,13 @@ type Props = {
   caps: PlaygroundCapabilities | undefined;
   value: RunSettingsValue;
   onChange: (patch: Partial<RunSettingsValue>) => void;
-  onOpenModelPicker?: () => void;
   onFallbackTest?: () => void;
   fallbackTesting?: boolean;
   walletBalance?: number;
+  capability?: 'chat' | 'embeddings' | 'image' | 'audio';
+  header?: ReactNode;
+  getCodeSlot?: ReactNode;
+  variant?: 'card' | 'flush';
 };
 
 export function RunSettingsPanel({
@@ -48,8 +51,13 @@ export function RunSettingsPanel({
   onFallbackTest,
   fallbackTesting,
   walletBalance,
+  capability = 'chat',
+  header,
+  getCodeSlot,
+  variant = 'card',
 }: Props) {
   const t = useTranslations('playground');
+  const isChat = capability === 'chat';
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(true);
   const params = caps?.params || [];
@@ -68,19 +76,22 @@ export function RunSettingsPanel({
   const desc = caps?.model_info?.description || model?.description;
 
   return (
-    <div className="flex max-h-full flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-4">
+    <div
+      className={
+        variant === 'flush'
+          ? 'flex h-full max-h-full flex-col gap-5 overflow-y-auto bg-muted/20 px-5 py-5'
+          : 'flex max-h-full flex-col gap-4 overflow-y-auto rounded-xl border border-border bg-card p-4'
+      }
+    >
       <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {t('runSettings')}
       </p>
 
+      {header}
+
+      {desc || typeof walletBalance === 'number' ? (
       <div>
-        <p className="font-display text-sm font-semibold">
-          {caps?.model_info?.name || model?.display_name || t('selectModel')}
-        </p>
-        <p className="mt-0.5 font-mono text-[11px] text-muted-foreground">
-          {model?.id || '—'}
-        </p>
-        {desc ? <p className="mt-2 text-xs text-muted-foreground">{desc}</p> : null}
+        {desc ? <p className="text-xs text-muted-foreground">{desc}</p> : null}
         {typeof walletBalance === 'number' ? (
           <p className="mt-2 text-xs text-muted-foreground">
             {t('balance')}:{' '}
@@ -90,19 +101,24 @@ export function RunSettingsPanel({
           </p>
         ) : null}
       </div>
+      ) : null}
 
+      {getCodeSlot}
+
+      {isChat ? (
       <div className="space-y-1.5">
         <Label>{t('systemInstructions')}</Label>
         <Textarea
-          rows={4}
+          rows={8}
           value={value.systemInstructions}
           onChange={(e) => onChange({ systemInstructions: e.target.value })}
           placeholder={t('systemPlaceholder')}
-          className="text-sm"
+          className="min-h-[160px] text-sm"
         />
       </div>
+      ) : null}
 
-      {showTemp ? (
+      {isChat && showTemp ? (
         <div className="space-y-1.5">
           <div className="flex justify-between text-xs">
             <Label>{t('temperature')}</Label>
@@ -120,7 +136,7 @@ export function RunSettingsPanel({
         </div>
       ) : null}
 
-      {showReasoning ? (
+      {isChat && showReasoning ? (
         <div className="space-y-1.5">
           <Label>{t('reasoningEffort')}</Label>
           <select
@@ -135,7 +151,7 @@ export function RunSettingsPanel({
         </div>
       ) : null}
 
-      {showThinking ? (
+      {isChat && showThinking ? (
         <div className="space-y-1.5">
           <Label>{t('thinking')}</Label>
           <select
@@ -150,7 +166,7 @@ export function RunSettingsPanel({
         </div>
       ) : null}
 
-      {showStream ? (
+      {isChat && showStream ? (
         <div className="flex items-center justify-between gap-2">
           <Label htmlFor="pg-stream">{t('streamToggle')}</Label>
           <Switch
@@ -161,6 +177,7 @@ export function RunSettingsPanel({
         </div>
       ) : null}
 
+      {isChat ? (
       <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-0">
@@ -196,7 +213,9 @@ export function RunSettingsPanel({
           ) : null}
         </CollapsibleContent>
       </Collapsible>
+      ) : null}
 
+      {isChat ? (
       <Collapsible open={toolsOpen} onOpenChange={setToolsOpen}>
         <CollapsibleTrigger asChild>
           <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-0">
@@ -278,8 +297,9 @@ export function RunSettingsPanel({
           ) : null}
         </CollapsibleContent>
       </Collapsible>
+      ) : null}
 
-      {caps?.fallback?.models?.length ? (
+      {isChat && caps?.fallback?.models?.length ? (
         <div className="space-y-2 rounded-lg border border-border p-3">
           <p className="text-sm font-medium">{t('fallbackChain')}</p>
           <ul className="space-y-1 font-mono text-[11px] text-muted-foreground">

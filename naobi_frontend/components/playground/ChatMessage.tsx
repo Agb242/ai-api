@@ -37,7 +37,7 @@ export function ChatMessage({
       <div className="flex min-w-0 flex-col gap-1">
         <div
           className={cn(
-            'max-w-[min(100%,640px)] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed',
+            'max-w-[min(100%,720px)] rounded-2xl px-4 py-3 text-sm leading-relaxed',
             isUser ? 'bg-[#FF6B35] text-white' : 'border border-border bg-card text-foreground',
           )}
         >
