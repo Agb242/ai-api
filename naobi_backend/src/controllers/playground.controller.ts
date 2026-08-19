@@ -2,7 +2,7 @@ import { Context } from 'koa';
 import { PassThrough } from 'stream';
 import { apiKeyService } from '../services/api-key.service';
 import { gatewayService } from '../services/gateway.service';
-import { llmRouter } from '../services/llm/router';
+import { llmRouter, type ChatCompletionRequest } from '../services/llm/router';
 import { classifyEndpoint } from '../services/llm/endpoint-class';
 import { Organization } from '../models/Organization';
 import { walletService } from '../services/wallet.service';
@@ -26,10 +26,11 @@ const CHAT_PASSTHROUGH = [
   'fallbacks',
 ] as const;
 
-function buildChatBody(body: Record<string, unknown>) {
-  const chatBody: Record<string, unknown> = {
-    model: body.model,
-    messages: body.messages,
+function buildChatBody(body: Record<string, unknown>): ChatCompletionRequest {
+  const model = String(body.model || '');
+  const chatBody: ChatCompletionRequest = {
+    model,
+    messages: body.messages as ChatCompletionRequest['messages'],
     stream: body.stream !== false,
   };
   for (const key of CHAT_PASSTHROUGH) {
