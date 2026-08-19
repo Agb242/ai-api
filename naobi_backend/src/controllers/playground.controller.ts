@@ -26,11 +26,26 @@ const CHAT_PASSTHROUGH = [
   'fallbacks',
 ] as const;
 
+/** Models often answer French in Spanish; pin replies to the user's message language. */
+const LANGUAGE_MIRROR =
+  'Always reply in the same language as the user\'s latest message. If they write in French, reply in French. Never switch to Spanish or another language unless the user wrote in that language.';
+
+function withLanguageMirror(messages: unknown): Array<{ role: string; content: unknown }> {
+  const list = Array.isArray(messages) ? [...messages] : [];
+  const first = list[0] as { role?: string; content?: unknown } | undefined;
+  if (first?.role === 'system' && typeof first.content === 'string') {
+    if (first.content.includes(LANGUAGE_MIRROR)) return list;
+    list[0] = { ...first, content: `${LANGUAGE_MIRROR}\n\n${first.content}` };
+    return list;
+  }
+  return [{ role: 'system', content: LANGUAGE_MIRROR }, ...list];
+}
+
 function buildChatBody(body: Record<string, unknown>): ChatCompletionRequest {
   const model = String(body.model || '');
   const chatBody: ChatCompletionRequest = {
     model,
-    messages: body.messages as ChatCompletionRequest['messages'],
+    messages: withLanguageMirror(body.messages as ChatCompletionRequest['messages']),
     stream: body.stream !== false,
   };
   for (const key of CHAT_PASSTHROUGH) {

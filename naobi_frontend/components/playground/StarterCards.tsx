@@ -14,7 +14,7 @@ export type StarterConfig = {
 const STARTERS: StarterConfig[] = [
   {
     id: 'assistant',
-    systemInstructions: 'You are a concise assistant. Answer clearly in the user language.',
+    systemInstructions: 'You are a concise assistant. Mirror the language of each user message.',
     temperature: 0.7,
   },
   {

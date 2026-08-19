@@ -66,6 +66,9 @@ function readUsage(json: any): { prompt_tokens: number; completion_tokens: numbe
 }
 type Modality = SandboxCapability;
 
+const LANGUAGE_MIRROR =
+  "Always reply in the same language as the user's latest message. If they write in French, reply in French. Never switch to Spanish or another language unless the user wrote in that language.";
+
 export default function PlaygroundPage() {
   const t = useTranslations('playground');
   const org = useAuthStore((s) => s.org);
@@ -232,8 +235,13 @@ export default function PlaygroundPage() {
     const handle = setTimeout(async () => {
       const messagesForCount = [
         ...(run.systemInstructions.trim()
-          ? [{ role: 'system', content: run.systemInstructions.trim() }]
-          : []),
+          ? [
+              {
+                role: 'system',
+                content: `${LANGUAGE_MIRROR}\n\n${run.systemInstructions.trim()}`,
+              },
+            ]
+          : [{ role: 'system', content: LANGUAGE_MIRROR }]),
         ...messages.map((m) => ({ role: m.role, content: m.content })),
         ...(input.trim() ? [{ role: 'user', content: input.trim() }] : []),
       ];
@@ -287,9 +295,11 @@ export default function PlaygroundPage() {
 
   function chatPayload(userMessages: Msg[], stream: boolean): Record<string, unknown> {
     const msgs: Array<{ role: string; content: string }> = [];
-    if (run.systemInstructions.trim()) {
-      msgs.push({ role: 'system', content: run.systemInstructions.trim() });
-    }
+    const extra = run.systemInstructions.trim();
+    msgs.push({
+      role: 'system',
+      content: extra ? `${LANGUAGE_MIRROR}\n\n${extra}` : LANGUAGE_MIRROR,
+    });
     for (const m of userMessages) {
       if (m.role === 'system') continue;
       msgs.push({ role: m.role, content: m.content });
