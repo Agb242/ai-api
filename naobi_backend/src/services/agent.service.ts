@@ -217,8 +217,18 @@ export const agentService = {
         });
       }
 
-      const result = await llmRouter.forward(payload as any, model, { bearerKey: virtualKey });
+      let result = await llmRouter.forward(payload as any, model, { bearerKey: virtualKey });
       const latencyMs = Date.now() - started;
+
+      // Agents remain useful on every chat model. Some providers expose a model in the
+      // catalogue but reject OpenAI tool-calling parameters at runtime. In that case,
+      // retry the exact same request without optional tools instead of failing the chat.
+      if (result.status >= 400 && tools.length) {
+        const plainPayload = { ...(payload as Record<string, unknown>) };
+        delete plainPayload.tools;
+        delete plainPayload.tool_choice;
+        result = await llmRouter.forward(plainPayload as any, model, { bearerKey: virtualKey });
+      }
 
       if (result.status >= 400) {
         await gatewayService.logError({
