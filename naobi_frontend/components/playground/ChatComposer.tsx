@@ -12,6 +12,7 @@ type Props = {
   onStop?: () => void;
   streaming?: boolean;
   disabled?: boolean;
+  tokenHint?: string | null;
 };
 
 export function ChatComposer({
@@ -21,10 +22,12 @@ export function ChatComposer({
   onStop,
   streaming,
   disabled,
+  tokenHint,
 }: Props) {
   const t = useTranslations('playground');
 
   return (
+    <div className="space-y-1">
     <div className="flex gap-2">
       <Textarea
         value={value}
@@ -50,6 +53,10 @@ export function ChatComposer({
           {t('send')}
         </Button>
       )}
+    </div>
+      {tokenHint ? (
+        <p className="px-0.5 font-mono text-[11px] text-muted-foreground">{tokenHint}</p>
+      ) : null}
     </div>
   );
 }

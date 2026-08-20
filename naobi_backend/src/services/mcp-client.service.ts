@@ -65,7 +65,7 @@ export const mcpClientService = {
     const client = await connect(config);
     try {
       const result = await client.listTools();
-      return result.tools.map((tool) => ({
+      return result.tools.map((tool: { name: string; description?: string; inputSchema?: unknown }) => ({
         name: tool.name,
         description: tool.description,
         inputSchema: tool.inputSchema as Record<string, unknown>,

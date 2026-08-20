@@ -62,7 +62,7 @@ export function AppShell({ children }: AppShellProps) {
             <SiteHeader variant="app" />
           </div>
         </div>
-        <main className="flex-1 overflow-auto">{children}</main>
+        <main className="relative min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>
   );

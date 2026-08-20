@@ -965,7 +965,174 @@ export const litellmAdmin = {
       return { available: false };
     }
   },
+
+  async jsonGet(path: string, timeoutMs = 12000): Promise<unknown | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}${path}`, {
+        headers: headers(),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM GET failed', { path, err });
+      return null;
+    }
+  },
+
+  async jsonPost(path: string, body: unknown, timeoutMs = 20000): Promise<unknown | null> {
+    if (!this.configured()) return null;
+    try {
+      const resp = await fetch(`${config.litellm.baseUrl}${path}`, {
+        method: 'POST',
+        headers: headers(),
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      if (!resp.ok) return null;
+      return await resp.json();
+    } catch (err) {
+      logger.warn('LiteLLM POST failed', { path, err });
+      return null;
+    }
+  },
+
+  async supportedOpenaiParams(model: string): Promise<string[] | null> {
+    const q = new URLSearchParams({ model });
+    const data = await this.jsonGet(`/utils/supported_openai_params?${q}`);
+    if (!data) return null;
+    if (Array.isArray(data)) return data.map(String);
+    const o = data as Record<string, unknown>;
+    const arr =
+      o.openai_params ||
+      o.supported_openai_params ||
+      o.params ||
+      o.data;
+    if (Array.isArray(arr)) return arr.map(String);
+    return null;
+  },
+
+  async tokenCounter(body: {
+    model?: string;
+    messages?: unknown[];
+    prompt?: string;
+    text?: string;
+  }): Promise<{ total_tokens?: number; prompt_tokens?: number } | null> {
+    const data = await this.jsonPost('/utils/token_counter', body);
+    if (!data || typeof data !== 'object') return null;
+    const o = data as any;
+    const total = Number(
+      o.total_tokens ?? o.token_count ?? o.count ?? o.prompt_tokens ?? NaN,
+    );
+    const prompt = Number(o.prompt_tokens ?? o.input_tokens ?? NaN);
+    return {
+      total_tokens: Number.isFinite(total) ? total : undefined,
+      prompt_tokens: Number.isFinite(prompt) ? prompt : undefined,
+    };
+  },
+
+  async transformRequest(body: unknown): Promise<unknown | null> {
+    return this.jsonPost('/utils/transform_request', body);
+  },
+
+  async modelHubInfo(model?: string): Promise<unknown | null> {
+    const q = model ? `?model=${encodeURIComponent(model)}` : '';
+    return (
+      (await this.jsonGet(`/public/model_hub/info${q}`)) ||
+      (await this.jsonGet(`/public/model_hub${q}`))
+    );
+  },
+
+  async getFallback(model: string): Promise<{ models: string[] } | null> {
+    const data = await this.jsonGet(`/fallback/${encodeURIComponent(model)}`);
+    if (!data) return null;
+    const models = extractFallbackModels(data);
+    return models.length ? { models, raw: data } as { models: string[] } : null;
+  },
+
+  async listMcpTools(): Promise<Array<{ name: string; description?: string; inputSchema?: unknown }>> {
+    const data =
+      (await this.jsonGet('/v1/mcp/tools')) ||
+      (await this.jsonGet('/mcp-rest/tools')) ||
+      (await this.jsonGet('/mcp/tools'));
+    return normalizeToolList(data);
+  },
+
+  async listSearchTools(): Promise<unknown[] | null> {
+    const data =
+      (await this.jsonGet('/search/tools')) || (await this.jsonGet('/search_tools'));
+    if (!data) return null;
+    if (Array.isArray(data)) return data;
+    const o = data as any;
+    if (Array.isArray(o.tools)) return o.tools;
+    if (Array.isArray(o.data)) return o.data;
+    return [data];
+  },
+
+  async search(query: string): Promise<unknown | null> {
+    return (
+      (await this.jsonPost('/search', { query })) ||
+      (await this.jsonPost('/v1/search', { query }))
+    );
+  },
+
+  async containersAvailable(): Promise<boolean> {
+    const data =
+      (await this.jsonGet('/containers')) || (await this.jsonGet('/v1/containers'));
+    return data != null;
+  },
+
+  async promptsAvailable(): Promise<boolean> {
+    const data = await this.jsonGet('/prompts/list');
+    return data != null;
+  },
 };
+
+function extractFallbackModels(data: unknown): string[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.map((x) => (typeof x === 'string' ? x : (x as any)?.model)).filter(Boolean);
+  }
+  const o = data as any;
+  const arr =
+    o.fallbacks ||
+    o.fallback_models ||
+    o.models ||
+    o.fallback ||
+    o.data;
+  if (Array.isArray(arr)) {
+    return arr
+      .map((x) => (typeof x === 'string' ? x : x?.model || x?.model_name))
+      .filter(Boolean);
+  }
+  if (typeof o.fallback_model === 'string') return [o.fallback_model];
+  return [];
+}
+
+function normalizeToolList(
+  data: unknown,
+): Array<{ name: string; description?: string; inputSchema?: unknown }> {
+  if (!data) return [];
+  let arr: any[] = [];
+  if (Array.isArray(data)) arr = data;
+  else {
+    const o = data as any;
+    arr = o.tools || o.data || o.items || [];
+  }
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((t) => {
+      const name = t?.name || t?.tool_name || t?.function?.name;
+      if (!name) return null;
+      return {
+        name: String(name),
+        description: t.description || t.function?.description,
+        inputSchema: t.inputSchema || t.input_schema || t.function?.parameters,
+      };
+    })
+    .filter(Boolean) as Array<{ name: string; description?: string; inputSchema?: unknown }>;
+}
 
 export function hashApiKey(raw: string): string {
   return crypto.createHash('sha256').update(raw).digest('hex');
