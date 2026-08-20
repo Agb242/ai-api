@@ -3,6 +3,10 @@ import authRoutes from './auth.routes';
 import dashboardRoutes from './dashboard.routes';
 import billingRoutes from './billing.routes';
 import playgroundRoutes from './playground.routes';
+import agentRoutes from './agent.routes';
+import mcpRoutes from './mcp.routes';
+import mcpServerRoutes from './mcp-server.routes';
+import filesRoutes from './files.routes';
 import gatewayRoutes from './gateway.routes';
 import passthroughRoutes from './passthrough.routes';
 
@@ -17,6 +21,10 @@ api.use(billingRoutes.routes());
 api.use(billingRoutes.allowedMethods());
 api.use(playgroundRoutes.routes());
 api.use(playgroundRoutes.allowedMethods());
+api.use(agentRoutes.routes());
+api.use(agentRoutes.allowedMethods());
+api.use(mcpRoutes.routes());
+api.use(mcpRoutes.allowedMethods());
 
 router.use(api.routes());
 router.use(api.allowedMethods());
@@ -26,5 +34,14 @@ router.use(gatewayRoutes.routes());
 router.use(gatewayRoutes.allowedMethods());
 router.use(passthroughRoutes.routes());
 router.use(passthroughRoutes.allowedMethods());
+
+// Naobi as an MCP server: external MCP clients (Claude, LobeChat, etc.) authenticate
+// with a Naobi API key and can call our own business agents as tools.
+router.use(mcpServerRoutes.routes());
+router.use(mcpServerRoutes.allowedMethods());
+
+// Files produced by native agent tools (e.g. generated PDFs) — GET /files/:id
+router.use(filesRoutes.routes());
+router.use(filesRoutes.allowedMethods());
 
 export default router;

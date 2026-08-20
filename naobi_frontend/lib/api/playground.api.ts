@@ -32,13 +32,19 @@ export const playgroundApi = {
       stream?: boolean;
       temperature?: number;
       max_tokens?: number;
+      top_p?: number;
+      tools?: unknown[];
+      tool_choice?: string;
+      response_format?: unknown;
+      reasoning_effort?: string;
+      thinking?: unknown;
     },
     signal?: AbortSignal,
   ): Promise<Response> {
     return fetch(`${API_BASE}/playground/chat/completions`, {
       method: 'POST',
       headers: sessionHeaders(),
-      body: JSON.stringify({ ...body, stream: body.stream !== false }),
+      body: JSON.stringify(body),
       signal,
     });
   },
@@ -72,5 +78,22 @@ export const playgroundApi = {
       body: JSON.stringify(body),
       signal,
     });
+  },
+
+  capabilities(model: string) {
+    const q = model ? `?model=${encodeURIComponent(model)}` : '';
+    return apiClient.get(`/playground/capabilities${q}`);
+  },
+
+  tokenCount(body: { model?: string; messages?: unknown[]; prompt?: string }) {
+    return apiClient.post('/playground/token-count', body);
+  },
+
+  transformRequest(body: unknown) {
+    return apiClient.post('/playground/transform-request', body);
+  },
+
+  fallbackTest(body: { api_key_id: string; model: string; messages?: unknown[] }) {
+    return apiClient.post('/playground/fallback-test', body);
   },
 };
