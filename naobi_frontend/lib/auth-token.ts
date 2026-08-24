@@ -3,7 +3,7 @@
  * Priority: localStorage auth_token → cookie → zustand persist (auth-storage).
  */
 
-/** Optional override, e.g. `.noabi.cloud` — must match the public site host. */
+/** Optional override, e.g. `.knotflow.cloud` — must match the public site host. */
 const COOKIE_DOMAIN_ENV = (process.env.NEXT_PUBLIC_COOKIE_DOMAIN || '').trim();
 
 function cookieDomainAttr(hostname: string): string {
@@ -12,11 +12,11 @@ function cookieDomainAttr(hostname: string): string {
     return `; Domain=${d}`;
   }
   if (hostname === 'localhost' || hostname === '127.0.0.1') return '';
-  if (hostname === 'noabi.cloud' || hostname.endsWith('.noabi.cloud')) {
-    return '; Domain=.noabi.cloud';
-  }
   if (hostname === 'knotflow.cloud' || hostname.endsWith('.knotflow.cloud')) {
     return '; Domain=.knotflow.cloud';
+  }
+  if (hostname === 'noabi.cloud' || hostname.endsWith('.noabi.cloud')) {
+    return '; Domain=.noabi.cloud';
   }
   if (hostname === 'checkflow.space' || hostname.endsWith('.checkflow.space')) {
     return '; Domain=.checkflow.space';

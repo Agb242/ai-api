@@ -23,7 +23,7 @@ export default function InviteAcceptPage() {
     if (!token) return;
     if (!session?.token) {
       try {
-        sessionStorage.setItem('noabi_pending_invite', token);
+        sessionStorage.setItem('knotflow_pending_invite', token);
       } catch {
         /* ignore */
       }

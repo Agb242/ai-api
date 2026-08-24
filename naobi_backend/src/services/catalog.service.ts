@@ -100,7 +100,7 @@ export const guardrailService = {
     let guardrailId = org.litellm_guardrail_id;
     if (!guardrailId) {
       const registered = await litellmAdmin.registerGuardrail({
-        guardrailName: `noabi-org-${params.organizationId.slice(0, 8)}`,
+        guardrailName: `knotflow-org-${params.organizationId.slice(0, 8)}`,
         litellmParams: {
           guardrail: 'presidio',
           mode: 'pre_call',
@@ -109,7 +109,7 @@ export const guardrailService = {
       guardrailId =
         registered?.guardrail_id ||
         registered?.guardrail_name ||
-        `noabi-org-${params.organizationId.slice(0, 8)}`;
+        `knotflow-org-${params.organizationId.slice(0, 8)}`;
     }
 
     const updated = await org.$query().patchAndFetch({

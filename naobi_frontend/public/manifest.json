@@ -1,13 +1,13 @@
 {
-  "name": "knotflow",
+  "name": "knotflow — AI infrastructure",
   "short_name": "knotflow",
-  "description": "Knowledge management and process documentation platform",
+  "description": "OpenAI-compatible LLM gateway for Africa — API keys, playground, usage dashboard.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0f0f",
-  "theme_color": "#0f0f0f",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
   "orientation": "portrait-primary",
-  "categories": ["business", "productivity","Sop","Process Management","Documentation","AI Context Portability"],
+  "categories": ["business", "developer tools", "productivity"],
   "icons": [
     {
       "src": "/icons/icon-48.png",

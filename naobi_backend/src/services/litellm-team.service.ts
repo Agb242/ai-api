@@ -78,7 +78,7 @@ export const litellmTeamService = {
       await litellmAdmin.ensureUser({
         userId,
         userAlias: params.email || userId,
-        userEmail: params.email || `${userId}@nexusai.local`,
+        userEmail: params.email || `${userId}@knotflow.local`,
       });
       await litellmAdmin.teamMemberAdd({
         teamId,

@@ -37,7 +37,7 @@ export const auditController = {
     const to = typeof ctx.query.to === 'string' ? ctx.query.to : undefined;
     const csv = await auditService.exportCsv(ctx.state.orgId!, { from, to });
     ctx.set('Content-Type', 'text/csv; charset=utf-8');
-    ctx.set('Content-Disposition', 'attachment; filename="noabi-audit.csv"');
+    ctx.set('Content-Disposition', 'attachment; filename="knotflow-audit.csv"');
     ctx.status = 200;
     ctx.body = csv;
   },

@@ -90,13 +90,19 @@ export default function BillingPage() {
 
   useEffect(() => {
     try {
-      const pending =
-        sessionStorage.getItem('noabi_pending_claim_key') ||
-        sessionStorage.getItem('nexusai_pending_claim_key');
+      const keys = [
+        'knotflow_pending_claim_key',
+        'noabi_pending_claim_key',
+        'nexusai_pending_claim_key',
+      ];
+      let pending: string | null = null;
+      for (const k of keys) {
+        pending = sessionStorage.getItem(k);
+        if (pending) break;
+      }
       if (pending) {
         setClaimKey(pending);
-        sessionStorage.removeItem('noabi_pending_claim_key');
-        sessionStorage.removeItem('nexusai_pending_claim_key');
+        for (const k of keys) sessionStorage.removeItem(k);
       }
     } catch {
       /* ignore */

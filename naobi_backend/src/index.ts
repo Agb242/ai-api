@@ -58,7 +58,7 @@ async function checkServices() {
 let bullmqStarted = false;
 
 const server = app.listen(config.port, async () => {
-  console.log(`noabi Gateway starting on :${config.port}`);
+  console.log(`knotflow Gateway starting on :${config.port}`);
   console.log(`Environment: ${config.nodeEnv}`);
   console.log(`LiteLLM: ${config.litellm.baseUrl || '(not set)'}`);
 

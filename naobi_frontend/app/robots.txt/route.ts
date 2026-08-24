@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
+import { SITE } from '@/lib/site';
 
 export async function GET() {
-  const robotsTxt = `# noabi — robots.txt
+  const robotsTxt = `# ${SITE.name} — robots.txt
+# ${SITE.url}
 
 User-agent: *
 Allow: /
@@ -13,15 +15,31 @@ Disallow: /*/wallet
 Disallow: /*/filters
 Disallow: /*/members
 Disallow: /*/logs
+Disallow: /*/audit
+Disallow: /*/playground
+Disallow: /*/agents
 Disallow: /*/onboarding
 Disallow: /*/organizations
+Disallow: /*/platform
 
-Sitemap: /sitemap.xml
+User-agent: GPTBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+Sitemap: ${SITE.url}/sitemap.xml
 `;
 
   return new NextResponse(robotsTxt, {
     headers: {
-      'Content-Type': 'text/plain',
+      'Content-Type': 'text/plain; charset=utf-8',
       'Cache-Control': 'public, max-age=3600, s-maxage=3600',
     },
   });

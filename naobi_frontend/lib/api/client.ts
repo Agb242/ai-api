@@ -314,7 +314,7 @@ export class ApiClient {
     });
   }
 
-  // POST with API Key (for noabi checks)
+  // POST with API Key (for knotflow checks)
   async postWithApiKey<T>(
     endpoint: string,
     apiKey: string,
@@ -326,7 +326,7 @@ export class ApiClient {
     });
   }
 
-  // GET with API Key (for noabi usage)
+  // GET with API Key (for knotflow usage)
   async getWithApiKey<T>(
     endpoint: string,
     apiKey: string

@@ -33,7 +33,7 @@ export default function AuditPage() {
     const url = URL.createObjectURL(res.blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'noabi-audit.csv';
+    a.download = 'knotflow-audit.csv';
     a.click();
     URL.revokeObjectURL(url);
     toast.success(t('exportOk'));

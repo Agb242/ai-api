@@ -4,7 +4,7 @@ const options: swaggerJsdoc.Options = {
   definition: {
     openapi: '3.0.0',
     info: {
-      title: 'noabi Gateway API',
+      title: 'knotflow Gateway API',
       version: '1.0.0',
       description: 'Unified LLM gateway — auth, API keys, wallet, filters, OpenAI-compatible chat completions',
     },

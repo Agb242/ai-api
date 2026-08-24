@@ -24,7 +24,7 @@
     "loading": "Loading…",
     "loadingAuth": "Checking session…",
     "auth": {
-      "logoAlt": "noabi"
+      "logoAlt": "knotflow"
     }
   },
   "header": {
@@ -418,7 +418,7 @@
     "gotoDashboard": "Go to dashboard"
   },
   "marketing": {
-    "title": "noabi",
+    "title": "knotflow",
     "badge": "AI infrastructure platform for Africa",
     "headline1": "Access the world's best",
     "headline2": "AI models in Africa",
@@ -446,9 +446,9 @@
     "insightsBody": "Usage dashboard, keys, logs and spend in one place — no billing surprises.",
     "docsTitle": "Developer docs",
     "docsBody": "Time-to-first-request under 5 minutes. Copy, paste, run.",
-    "aboutTitle": "noabi — LLM access for Africa",
-    "aboutBody": "noabi is your AI inference platform: unified API, MoMo packs, FR/EN control plane. Built for teams shipping from Africa.",
-    "footer": "© noabi — AI infrastructure · Africa"
+    "aboutTitle": "knotflow — LLM access for Africa",
+    "aboutBody": "knotflow is your AI inference platform: unified API, MoMo packs, FR/EN control plane. Built for teams shipping from Africa.",
+    "footer": "© knotflow — AI infrastructure · Africa"
   },
   "common": {
     "save": "Save",

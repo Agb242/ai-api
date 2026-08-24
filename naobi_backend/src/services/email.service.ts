@@ -14,15 +14,15 @@ const transporter = nodemailer.createTransport({
 export const emailService = {
   async sendOtpEmail(email: string, otpCode: string, isRegistration = false): Promise<void> {
     const subject = isRegistration
-      ? 'noabi — vérifiez votre email'
-      : 'noabi — code de connexion';
+      ? 'knotflow — vérifiez votre email'
+      : 'knotflow — code de connexion';
 
     const html = `
       <!DOCTYPE html>
       <html>
       <body style="font-family: system-ui, sans-serif; color: #111; background: #fafafa;">
         <div style="max-width: 480px; margin: 24px auto; padding: 24px; background: #fff; border: 1px solid #e5e5e5;">
-          <h1 style="font-size: 18px; margin: 0 0 12px;">noabi</h1>
+          <h1 style="font-size: 18px; margin: 0 0 12px;">knotflow</h1>
           <p style="font-size: 14px; line-height: 1.5;">
             ${
               isRegistration
@@ -54,13 +54,13 @@ export const emailService = {
     if (!config.mail.user) {
       return;
     }
-    const subject = `noabi — plafond budgétaire ${opts.ratio}%`;
+    const subject = `knotflow — plafond budgétaire ${opts.ratio}%`;
     const html = `
       <!DOCTYPE html>
       <html>
       <body style="font-family: system-ui, sans-serif; color: #111;">
         <div style="max-width: 480px; margin: 24px auto; padding: 24px; border: 1px solid #e5e5e5;">
-          <h1 style="font-size: 18px;">noabi</h1>
+          <h1 style="font-size: 18px;">knotflow</h1>
           <p>L’organisation <strong>${opts.orgName}</strong> a consommé ${opts.ratio}% de son plafond budgétaire.</p>
           <p>Consommé : ${opts.consumed.toFixed(4)} / plafond : ${opts.ceiling.toFixed(4)}</p>
         </div>

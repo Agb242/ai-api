@@ -3,16 +3,16 @@
 import { GoogleAuthProvider } from '@/providers/google-oauth-provider';
 import { Link } from '@/i18n/routing';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
-import { NoabiLogo } from '@/components/layout/NoabiLogo';
+import { KnotflowLogo } from '@/components/layout/KnotflowLogo';
+import { SITE } from '@/lib/site';
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
     <GoogleAuthProvider>
       <div className="flex min-h-screen flex-col bg-background px-4 sm:px-6">
         <div className="mx-auto flex w-full max-w-lg items-center justify-between py-6">
-          <Link href="/" className="inline-flex items-center gap-2 text-foreground" aria-label="noabi">
-            <NoabiLogo size={26} />
-            <span className="font-display text-[17px] font-semibold tracking-tight">noabi</span>
+          <Link href="/" className="inline-flex text-foreground" aria-label={SITE.name}>
+            <KnotflowLogo size={28} showWordmark />
           </Link>
           <LanguageSwitcher />
         </div>

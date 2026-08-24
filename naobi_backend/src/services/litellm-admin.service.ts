@@ -58,7 +58,7 @@ export const litellmAdmin = {
     await this.assertHealthy();
 
     const userId = `${slugify(params.pseudo)}-${crypto.randomBytes(2).toString('hex')}`;
-    const userEmail = `${slugify(params.pseudo)}@nexusai.local`;
+    const userEmail = `${slugify(params.pseudo)}@knotflow.local`;
 
     const userResp = await fetch(`${config.litellm.baseUrl}/user/new`, {
       method: 'POST',

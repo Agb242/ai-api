@@ -85,11 +85,11 @@ export default function PlaygroundPage() {
   const [streaming, setStreaming] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [reveal, setReveal] = useState<ApiKeyCreated | null>(null);
-  const [embedInput, setEmbedInput] = useState('Hello from noabi');
+  const [embedInput, setEmbedInput] = useState('Hello from knotflow');
   const [embedResult, setEmbedResult] = useState('');
   const [imagePrompt, setImagePrompt] = useState('A red bicycle on a sunny street');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [audioText, setAudioText] = useState('Bonjour, bienvenue sur noabi.');
+  const [audioText, setAudioText] = useState('Bonjour, bienvenue sur knotflow.');
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const abortRef = useRef<AbortController | null>(null);

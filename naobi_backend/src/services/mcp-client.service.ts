@@ -38,7 +38,7 @@ async function connect(config: McpConnectionConfig): Promise<Client> {
     throw Object.assign(new Error('MCP_CONNECTION_FAILED'), { code: 'MCP_CONNECTION_FAILED' });
   }
 
-  const client = new Client({ name: 'naobi-agent', version: '1.0.0' });
+  const client = new Client({ name: 'knotflow-agent', version: '1.0.0' });
   const transport = new StreamableHTTPClientTransport(url, {
     requestInit: { headers: buildHeaders(config) },
   });

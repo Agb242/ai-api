@@ -43,7 +43,7 @@ export const DEFAULT_JSON_SCHEMA = {
 export const WEB_SEARCH_TOOL = {
   type: 'function' as const,
   function: {
-    name: 'noabi_web_search',
+    name: 'knotflow_web_search',
     description: 'Search the public web and return snippets.',
     parameters: {
       type: 'object',

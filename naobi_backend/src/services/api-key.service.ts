@@ -74,7 +74,7 @@ export const apiKeyService = {
     await litellmAdmin.ensureUser({
       userId: litellmUserId,
       userAlias: params.name,
-      userEmail: `${litellmUserId}@nexusai.local`,
+      userEmail: `${litellmUserId}@knotflow.local`,
     });
 
     const generated = await litellmAdmin.generateKey({
@@ -267,7 +267,7 @@ export const apiKeyService = {
       await litellmAdmin.ensureUser({
         userId: litellmUserId,
         userAlias: key.name,
-        userEmail: `${litellmUserId}@nexusai.local`,
+        userEmail: `${litellmUserId}@knotflow.local`,
       });
       const generated = await litellmAdmin.generateKey({
         userId: litellmUserId,

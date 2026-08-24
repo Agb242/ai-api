@@ -29,11 +29,11 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'noabi.cloud',
+        hostname: 'knotflow.cloud',
       },
       {
         protocol: 'https',
-        hostname: 'app.noabi.cloud',
+        hostname: 'app.knotflow.cloud',
       },
     ],
   },

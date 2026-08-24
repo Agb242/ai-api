@@ -36,7 +36,7 @@ export default function CompliancePage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'noabi-compliance-export.json';
+    a.download = 'knotflow-compliance-export.json';
     a.click();
     URL.revokeObjectURL(url);
     toast.success(t('exportOk'));

@@ -20,6 +20,8 @@ import {
   // ClipboardCheck — Compliance hidden (audit_v3)
   // CreditCard, Wallet — temporarily unused (Billing/Wallet hidden)
 } from 'lucide-react';
+import Image from 'next/image';
+import { SITE } from '@/lib/site';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
 
@@ -27,7 +29,7 @@ interface SidebarProps {
   onClose?: () => void;
 }
 
-const COLLAPSE_STORAGE_KEY = 'noabi_sidebar_collapsed';
+const COLLAPSE_STORAGE_KEY = 'knotflow_sidebar_collapsed';
 
 export default function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
@@ -43,7 +45,10 @@ export default function Sidebar({ onClose }: SidebarProps) {
   useEffect(() => {
     if (!collapsible) return;
     try {
-      setCollapsed(localStorage.getItem(COLLAPSE_STORAGE_KEY) === '1');
+      const v =
+        localStorage.getItem(COLLAPSE_STORAGE_KEY) ??
+        localStorage.getItem('noabi_sidebar_collapsed');
+      setCollapsed(v === '1');
     } catch {
       /* ignore */
     }
@@ -87,10 +92,16 @@ export default function Sidebar({ onClose }: SidebarProps) {
     >
       <div className={cn('flex items-center gap-2 px-4 py-5', collapsed ? 'justify-center' : 'justify-between')}>
         <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
-          <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" />
+          <Image
+            src={SITE.logo}
+            alt={SITE.name}
+            width={collapsed ? 24 : 28}
+            height={collapsed ? 24 : 28}
+            className="shrink-0 rounded-md object-contain"
+          />
           {!collapsed ? (
             <span className="font-display text-[16px] font-semibold tracking-tight text-foreground">
-              noabi
+              {SITE.name}
             </span>
           ) : null}
         </Link>

@@ -9,7 +9,7 @@ async function checkDeps() {
 }
 
 async function main() {
-  console.log(`noabi BullMQ worker (env=${config.nodeEnv})`);
+  console.log(`knotflow BullMQ worker (env=${config.nodeEnv})`);
   await checkDeps();
   await bullmqBootstrap.start();
   console.log('Workers: models sync, spend sync, key analytics, cleanup');

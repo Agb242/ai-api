@@ -133,7 +133,7 @@ export default function PublicBuyPage() {
                 href="/login"
                 onClick={() => {
                   try {
-                    sessionStorage.setItem('noabi_pending_claim_key', pollStatus.key);
+                    sessionStorage.setItem('knotflow_pending_claim_key', pollStatus.key);
                   } catch {
                     /* ignore */
                   }

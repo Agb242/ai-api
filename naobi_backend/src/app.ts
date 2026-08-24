@@ -16,7 +16,7 @@ const router = new Router();
 router.get('/health', (ctx: Context) => {
   ctx.body = {
     status: 'OK',
-    service: 'noabi-gateway',
+    service: 'knotflow-gateway',
     timestamp: new Date().toISOString(),
     version: config.apiVersion,
     environment: config.nodeEnv,
@@ -25,7 +25,7 @@ router.get('/health', (ctx: Context) => {
 
 router.get('/api', (ctx: Context) => {
   ctx.body = {
-    message: 'noabi Gateway API',
+    message: 'knotflow Gateway API',
     version: config.apiVersion,
     documentation: `${config.domain}/api/docs`,
   };

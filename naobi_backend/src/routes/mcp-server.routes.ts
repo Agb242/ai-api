@@ -23,7 +23,7 @@ const chatWithAgentInputSchema = {
 };
 
 function buildMcpServer(orgId: string, apiKeyId: string) {
-  const server = new SdkMcpServer({ name: 'naobi', version: '1.0.0' });
+  const server = new SdkMcpServer({ name: 'knotflow', version: '1.0.0' });
 
   server.registerTool(
     'list_agent_templates',

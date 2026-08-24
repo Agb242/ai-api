@@ -6,7 +6,7 @@ export function getGatewayBase(): string {
   return api.replace(/\/api\/v1\/?$/, '').replace(/\/$/, '');
 }
 
-export const PLAYGROUND_KEY_STORAGE = 'noabi_playground_key';
+export const PLAYGROUND_KEY_STORAGE = 'knotflow_playground_key';
 
 export function rememberPlaygroundKey(plaintext: string) {
   if (typeof window === 'undefined') return;

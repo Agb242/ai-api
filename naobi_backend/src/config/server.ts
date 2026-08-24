@@ -58,7 +58,7 @@ export const config = {
     secure: process.env.SMTP_SECURE === 'true',
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
-    from: process.env.MAIL_FROM || 'noabi <noreply@noabi.local>',
+    from: process.env.MAIL_FROM || 'knotflow <noreply@knotflow.cloud>',
   },
 
   google: {
@@ -85,14 +85,14 @@ export const config = {
     webhookSecret: process.env.COLLECTES_WEBHOOK_SECRET || process.env.COLLECTES_SECRET_KEY || '',
   },
 
-  encryptionKey: requireEnv('ENCRYPTION_KEY', 'noabi_dev_encryption_key_change_me'),
+  encryptionKey: requireEnv('ENCRYPTION_KEY', 'knotflow_dev_encryption_key_change_me'),
 
   platformAdminEmails: [] as string[],
 
   auditRetentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS || '90', 10) || 90,
 };
 
-/** Extra CORS origins (comma-separated), e.g. https://noabi.checkflow.space */
+/** Extra CORS origins (comma-separated), e.g. https://knotflow.cloud */
 function corsOriginsFromEnv(): string[] {
   return (process.env.CORS_ORIGINS || '')
     .split(',')

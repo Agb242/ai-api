@@ -20,12 +20,20 @@ import type { User, Session } from '@/lib/types/auth.types';
 
 type Step = 'email' | 'otp';
 
-const PENDING_CLAIM = 'noabi_pending_claim_key';
-const PENDING_INVITE = 'noabi_pending_invite';
+const PENDING_CLAIM = 'knotflow_pending_claim_key';
+const PENDING_INVITE = 'knotflow_pending_invite';
+
+function legacyKey(key: string): string[] {
+  return [key, key.replace('knotflow_', 'noabi_'), key.replace('knotflow_', 'nexusai_')];
+}
 
 function safeGet(key: string): string | null {
   try {
-    return sessionStorage.getItem(key) || sessionStorage.getItem(key.replace('noabi_', 'nexusai_'));
+    for (const k of legacyKey(key)) {
+      const v = sessionStorage.getItem(k);
+      if (v) return v;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -33,8 +41,7 @@ function safeGet(key: string): string | null {
 
 function safeRemove(key: string) {
   try {
-    sessionStorage.removeItem(key);
-    sessionStorage.removeItem(key.replace('noabi_', 'nexusai_'));
+    for (const k of legacyKey(key)) sessionStorage.removeItem(k);
   } catch {
     /* ignore */
   }
