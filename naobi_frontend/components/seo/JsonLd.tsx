@@ -9,7 +9,7 @@ export function JsonLd() {
         '@id': `${SITE.url}/#organization`,
         name: SITE.legalName,
         url: SITE.url,
-        logo: `${SITE.url}${SITE.logo}`,
+        logo: `${SITE.url}${SITE.logoWordmark}`,
         sameAs: [],
       },
       {

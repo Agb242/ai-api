@@ -6,7 +6,6 @@ import { Link } from '@/i18n/routing';
 import { ArrowRight, Menu, X } from 'lucide-react';
 import { LanguageSwitcher } from '@/components/shared/LanguageSwitcher';
 import { UserMenu } from '@/components/layout/UserMenu';
-import { KnotflowLogo } from '@/components/layout/KnotflowLogo';
 import { useAuthStore } from '@/lib/stores/auth.store';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -39,8 +38,6 @@ export function SiteHeader({ variant = 'marketing', className }: SiteHeaderProps
       status === 'authenticated_no_org' ||
       status === 'authenticated_needs_org_pick');
 
-  const homeHref = isAuthed && status === 'authenticated_ready' ? '/dashboard' : '/';
-
   return (
     <header
       className={cn(
@@ -56,10 +53,6 @@ export function SiteHeader({ variant = 'marketing', className }: SiteHeaderProps
           variant === 'auth' && 'mx-auto max-w-6xl px-0',
         )}
       >
-        <Link href={homeHref} className="flex shrink-0 items-center text-foreground">
-          <KnotflowLogo size={28} showWordmark />
-        </Link>
-
         {variant === 'marketing' && !isAuthed ? (
           <nav className="hidden items-center gap-0.5 lg:flex">
             {MARKETING_NAV.map((item) => (
@@ -72,7 +65,9 @@ export function SiteHeader({ variant = 'marketing', className }: SiteHeaderProps
               </a>
             ))}
           </nav>
-        ) : null}
+        ) : (
+          <div className="min-w-0 flex-1" aria-hidden />
+        )}
 
         <div className="flex items-center gap-1.5 sm:gap-2">
           {isAuthed && org?.name && variant !== 'auth' ? (

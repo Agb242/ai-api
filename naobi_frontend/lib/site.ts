@@ -7,8 +7,12 @@ export const SITE = {
   appUrl: 'https://app.knotflow.cloud',
   apiUrl: 'https://api.knotflow.cloud',
   ogImage: '/og-image.png',
-  logo: '/icons/logo_128x128.png',
+  /** K mark only — sidebar & favicon (no wordmark baked in) */
+  logoMark: '/icons/icon_mark_square.png',
+  /** Full wordmark — OG / schema only */
+  logoWordmark: '/icons/logo_128x128.png',
   icon: '/icons/icon-192.png',
+  favicon: '/icons/icon-32.png',
   locales: ['fr', 'en'] as const,
   defaultLocale: 'fr' as const,
   title: {
@@ -36,3 +40,9 @@ export function localeUrl(locale: string, path = ''): string {
   const p = path.startsWith('/') ? path : path ? `/${path}` : '';
   return `${SITE.url}/${locale}${p}`;
 }
+
+/** Sidebar logo sizes */
+export const SIDEBAR_LOGO = {
+  expanded: 44,
+  collapsed: 36,
+} as const;

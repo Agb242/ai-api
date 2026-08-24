@@ -20,8 +20,8 @@ import {
   // ClipboardCheck — Compliance hidden (audit_v3)
   // CreditCard, Wallet — temporarily unused (Billing/Wallet hidden)
 } from 'lucide-react';
-import Image from 'next/image';
-import { SITE } from '@/lib/site';
+import { SIDEBAR_LOGO, SITE } from '@/lib/site';
+import { KnotflowLogo } from '@/components/layout/KnotflowLogo';
 import { Button } from '@/components/ui/button';
 import { useTranslations } from 'next-intl';
 
@@ -35,7 +35,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
   const pathname = usePathname();
   const org = useAuthStore((s) => s.org);
   const t = useTranslations('nav');
-  const tLayout = useTranslations('layout');
   const [collapsed, setCollapsed] = useState(false);
 
   // Only ever collapse the persistent desktop rail — the mobile Sheet always
@@ -90,20 +89,18 @@ export default function Sidebar({ onClose }: SidebarProps) {
         collapsed ? 'w-[64px]' : 'w-[220px]',
       )}
     >
-      <div className={cn('flex items-center gap-2 px-4 py-5', collapsed ? 'justify-center' : 'justify-between')}>
-        <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
-          <Image
-            src={SITE.logo}
-            alt={SITE.name}
-            width={collapsed ? 24 : 28}
-            height={collapsed ? 24 : 28}
-            className="shrink-0 rounded-md object-contain"
-          />
-          {!collapsed ? (
-            <span className="font-display text-[16px] font-semibold tracking-tight text-foreground">
-              {SITE.name}
-            </span>
-          ) : null}
+      <div
+        className={cn(
+          'flex items-center px-3 py-4',
+          collapsed ? 'flex-col gap-2' : 'justify-between gap-2',
+        )}
+      >
+        <Link
+          href="/dashboard"
+          className={cn('flex shrink-0 items-center', collapsed && 'justify-center')}
+          aria-label={SITE.name}
+        >
+          <KnotflowLogo size={collapsed ? SIDEBAR_LOGO.collapsed : SIDEBAR_LOGO.expanded} />
         </Link>
         {onClose ? (
           <Button
@@ -174,7 +171,6 @@ export default function Sidebar({ onClose }: SidebarProps) {
       {org?.name && !collapsed ? (
         <div className="shrink-0 border-t border-border p-3">
           <p className="truncate px-2 text-[13px] font-medium text-foreground">{org.name}</p>
-          <p className="px-2 text-[11px] text-muted-foreground">{tLayout('auth.logoAlt')}</p>
         </div>
       ) : null}
     </aside>
